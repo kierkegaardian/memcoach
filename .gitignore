@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+.env
+.env.*
+
+# OS/editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

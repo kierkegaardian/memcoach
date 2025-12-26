@@ -1,0 +1,16 @@
+/* Custom styles on top of Tailwind */
+body {
+    font-family: 'Inter', system-ui, sans-serif;
+}
+
+h1, h2, h3 {
+    color: #1e40af;
+}
+
+/* Kid-friendly animations */
+@keyframes confetti {
+    0% { transform: translateY(0) rotate(0); }
+    100% { transform: translateY(-100vh) rotate(360deg); }
+}
+
+/* Add more custom CSS as needed, e.g., for bonus confetti */

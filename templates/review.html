@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Review {{ deck.name }} for {{ kid.name }} - MemCoach{% endblock %}
+
+{% block extra_head %}
+<style>
+    .prompt-large {
+        font-size: 1.5rem;
+        font-weight: bold;
+        line-height: 1.4;
+        margin-bottom: 1rem;
+        color: #1e40af;
+    }
+    .recall-textarea {
+        font-size: 1.2rem;
+        line-height: 1.5;
+        border: 2px solid #e5e7eb;
+        transition: border-color 0.2s;
+    }
+    .recall-textarea:focus {
+        border-color: #3b82f6;
+        outline: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <h2 class="text-3xl font-bold mb-6">Review Session: {{ deck.name }} for {{ kid.name }}</h2>
+    <div id="result"></div>
+    <div id="card-container">
+        {% if card %}
+            {% include "partials/card.html" %}
+        {% else %}
+            {% include "partials/no_cards.html" %}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Optional kid-friendly sound or animation on submit
+    document.body.addEventListener('htmx:afterRequest', function(e) {
+        if (e.detail.xhr.status === 200) {
+            // Play success sound or confetti if bonus
+            console.log('Card reviewed!');
+        }
+    });
+</script>
+{% endblock %}

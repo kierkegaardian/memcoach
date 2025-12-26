@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}{{ kid.name }}'s Decks - MemCoach{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <h2 class="text-3xl font-bold mb-6">Decks for {{ kid.name }}</h2>
+    <a href="/decks/new" class="bg-green-500 text-white px-4 py-2 rounded mb-6 inline-block hover:bg-green-600">+ New Deck</a>
+    {% if decks %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for deck in decks %}
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h3 class="text-xl font-semibold mb-4">{{ deck.name }}</h3>
+                    <div class="space-x-3">
+                        <a href="/decks/{{ deck.id }}/add?kid_id={{ kid.id }}" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">Add Cards</a>
+                        <a href="/review/{{ kid.id }}/{{ deck.id }}" class="bg-purple-500 text-white px-4 py-2 rounded text-sm hover:bg-purple-600">Start Review</a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="text-center py-12">
+            <p class="text-gray-500 text-lg mb-4">No decks yet.</p>
+            <a href="/decks/new" class="bg-blue-500 text-white px-6 py-3 rounded-lg">Create Your First Deck</a>
+        </div>
+    {% endif %}
+    <a href="/" class="bg-gray-500 text-white px-6 py-3 rounded-lg mt-6 inline-block hover:bg-gray-600">Back to Home</a>
+</div>
+{% endblock %}

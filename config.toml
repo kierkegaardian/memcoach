@@ -1,0 +1,11 @@
+[ollama]
+model = "llama3.2"
+timeout = 15
+
+[grading]
+# Grading thresholds
+levenshtein_perfect_threshold = 0.98
+levenshtein_good_threshold = 0.85
+
+# Require LLM confirmation for borderline cases
+use_llm_on_borderline = true

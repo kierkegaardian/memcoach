@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Decks - MemCoach{% endblock %}
+
+{% block content %}
+<div class="text-center">
+    <h2 class="text-3xl font-bold mb-6 text-gray-800">Decks</h2>
+    <a href="/decks/new" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-lg mb-6 inline-block transition">+ New Deck</a>
+    {% if decks %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
+            {% for deck in decks %}
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-xl font-semibold mb-2">{{ deck.name }}</h3>
+                    <div class="space-x-2">
+                        <a href="/decks/{{ deck.id }}/add" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">Add Cards</a>
+                        <a href="/review/1/{{ deck.id }}" class="bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600">Review</a>  <!-- Assume kid_id=1 for now -->
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p class="text-gray-600">No decks yet. Create one to add cards!</p>
+    {% endif %}
+</div>
+{% endblock %}
