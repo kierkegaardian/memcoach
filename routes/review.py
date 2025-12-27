@@ -60,7 +60,14 @@ async def next_card(kid_id: int, deck_id: int, request: Request, conn = Depends(
         return templates.TemplateResponse("partials/no_cards.html", {"request": request, "kid_id": kid_id, "deck_id": deck_id})
 
 @router.post("/submit")
-async def submit_review(kid_id: int, deck_id: int, card_id: int, user_text: str = Form(...), conn = Depends(get_db)):
+async def submit_review(
+    kid_id: int,
+    deck_id: int,
+    card_id: int,
+    request: Request,
+    user_text: str = Form(...),
+    conn = Depends(get_db),
+):
     """HTMX endpoint to grade recall, update card/review, return result partial."""
     config = load_config()
     cursor = conn.cursor()
@@ -87,16 +94,15 @@ async def submit_review(kid_id: int, deck_id: int, card_id: int, user_text: str 
         'good': 'bg-yellow-100 border-yellow-400 text-yellow-800',
         'fail': 'bg-red-100 border-red-400 text-red-800'
     }
-    result_html = f"""
-    <div class="p-4 mb-4 rounded border {color_class.get(grade, 'bg-gray-100')}">
-        <h3 class="font-bold text-lg">Your Grade: {grade.upper()}</h3>
-        <p><strong>You typed:</strong> {user_text}</p>
-        <p><strong>Correct:</strong> {full_text}</p>
-        <button hx-get="/review/next?kid_id={kid_id}&deck_id={deck_id}" 
-                hx-target="#card-container" hx-swap="innerHTML"
-                class="bg-blue-500 text-white px-4 py-2 rounded mt-2 hover:bg-blue-600">
-            Next Card
-        </button>
-    </div>
-    """
-    return HTMLResponse(result_html)
+    return templates.TemplateResponse(
+        "partials/review_result.html",
+        {
+            "request": request,
+            "grade": grade,
+            "color_class": color_class.get(grade, "bg-gray-100"),
+            "user_text": user_text,
+            "full_text": full_text,
+            "kid_id": kid_id,
+            "deck_id": deck_id,
+        },
+    )
