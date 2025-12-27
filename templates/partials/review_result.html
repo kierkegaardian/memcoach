@@ -1,0 +1,13 @@
+<div class="p-4 mb-4 rounded border {{ color_class }}">
+  <h3 class="font-bold text-lg">Your Grade: {{ grade.upper() }}</h3>
+  <p><strong>You typed:</strong> {{ user_text }}</p>
+  <p><strong>Correct:</strong> {{ full_text }}</p>
+  <button
+    hx-get="/review/next?kid_id={{ kid_id }}&deck_id={{ deck_id }}"
+    hx-target="#card-container"
+    hx-swap="innerHTML"
+    class="bg-blue-500 text-white px-4 py-2 rounded mt-2 hover:bg-blue-600"
+  >
+    Next Card
+  </button>
+</div>
