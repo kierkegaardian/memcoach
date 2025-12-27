@@ -61,5 +61,7 @@ async def add_cards(
         conn.commit()
         redirect_target = f"/kids/{kid_id}/decks" if kid_id else "/decks"
         return RedirectResponse(url=redirect_target, status_code=status.HTTP_303_SEE_OTHER)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to add cards: {str(e)}")
