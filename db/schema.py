@@ -21,18 +21,33 @@ CREATE TABLE IF NOT EXISTS deck_plans (
     FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE
 );
 
+-- Long texts (parent for chunked cards)
+CREATE TABLE IF NOT EXISTS texts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deck_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    full_text TEXT NOT NULL,
+    chunk_strategy TEXT NOT NULL DEFAULT 'lines',
+    delimiter TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE
+);
+
 -- Cards (with SM-2 fields)
 CREATE TABLE IF NOT EXISTS cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     deck_id INTEGER NOT NULL,
     prompt TEXT NOT NULL,
     full_text TEXT NOT NULL,
+    text_id INTEGER,
+    chunk_index INTEGER,
     interval_days INTEGER NOT NULL DEFAULT 1,
     due_date TEXT NOT NULL DEFAULT (date('now')),
     ease_factor REAL NOT NULL DEFAULT 2.5,
     streak INTEGER NOT NULL DEFAULT 0,
     mastery_status TEXT NOT NULL DEFAULT 'new' CHECK(mastery_status IN ('new', 'learning', 'mastered')),
-    FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE
+    FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE,
+    FOREIGN KEY (text_id) REFERENCES texts (id) ON DELETE SET NULL
 );
 
 -- Review log
@@ -53,7 +68,9 @@ CREATE TABLE IF NOT EXISTS reviews (
 INDEXES_SQL = """
 CREATE INDEX IF NOT EXISTS idx_cards_due ON cards (due_date);
 CREATE INDEX IF NOT EXISTS idx_cards_deck ON cards (deck_id);
+CREATE INDEX IF NOT EXISTS idx_cards_text ON cards (text_id, chunk_index);
 CREATE INDEX IF NOT EXISTS idx_deck_plans_deck ON deck_plans (deck_id);
+CREATE INDEX IF NOT EXISTS idx_texts_deck ON texts (deck_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_card_kid ON reviews (card_id, kid_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_ts ON reviews (ts);
 """

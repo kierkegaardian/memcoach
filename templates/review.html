@@ -30,6 +30,16 @@
     <p class="text-gray-600 mb-4">
         Pick a hint style for this session: no hints, first letters, every Nth word, or line-by-line.
     </p>
+    <div class="mb-4 bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-700">
+        <span class="font-medium">Chunk grouping:</span>
+        {% if group_texts %}
+            <span class="ml-2">On</span>
+            <a href="/review/{{ kid_id }}/{{ deck_id }}" class="ml-3 text-blue-600 hover:underline">Turn off</a>
+        {% else %}
+            <span class="ml-2">Off</span>
+            <a href="/review/{{ kid_id }}/{{ deck_id }}?group_texts=1" class="ml-3 text-blue-600 hover:underline">Turn on</a>
+        {% endif %}
+    </div>
     <div id="result"></div>
     <div id="card-container">
         {% if card %}
