@@ -19,7 +19,6 @@ def init_db():
     CONFIG_DIR.mkdir(exist_ok=True)
     with get_conn() as conn:
         conn.executescript(SCHEMA_SQL)
-        conn.executescript(INDEXES_SQL)
         ensure_card_mastery_status(conn)
         ensure_card_chunk_fields(conn)
         ensure_soft_delete_columns(conn)
@@ -32,6 +31,7 @@ def init_db():
         ensure_assignment_defaults(conn)
         ensure_deck_mastery_rules(conn)
         ensure_schema_version(conn)
+        conn.executescript(INDEXES_SQL)
         conn.commit()
     run_daily_backup()
 
