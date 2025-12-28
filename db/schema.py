@@ -1,6 +1,6 @@
 # SQL schema for MemCoach database
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA_SQL = """
 -- Kids
@@ -37,6 +37,15 @@ CREATE TABLE IF NOT EXISTS deck_plans (
     deck_id INTEGER PRIMARY KEY,
     weekly_goal INTEGER,
     target_date TEXT,
+    FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE
+);
+
+-- Deck mastery rules
+CREATE TABLE IF NOT EXISTS deck_mastery_rules (
+    deck_id INTEGER PRIMARY KEY,
+    consecutive_grades INTEGER NOT NULL DEFAULT 3,
+    min_ease_factor REAL NOT NULL DEFAULT 2.5,
+    min_interval_days INTEGER NOT NULL DEFAULT 7,
     FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE
 );
 
@@ -146,6 +155,7 @@ CREATE INDEX IF NOT EXISTS idx_cards_text ON cards (text_id, chunk_index);
 CREATE INDEX IF NOT EXISTS idx_cards_deleted ON cards (deleted_at);
 CREATE INDEX IF NOT EXISTS idx_cards_deck_position ON cards (deck_id, position);
 CREATE INDEX IF NOT EXISTS idx_deck_plans_deck ON deck_plans (deck_id);
+CREATE INDEX IF NOT EXISTS idx_deck_mastery_rules_deck ON deck_mastery_rules (deck_id);
 CREATE INDEX IF NOT EXISTS idx_texts_deck ON texts (deck_id);
 CREATE INDEX IF NOT EXISTS idx_texts_deleted ON texts (deleted_at);
 CREATE INDEX IF NOT EXISTS idx_kids_deleted ON kids (deleted_at);

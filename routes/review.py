@@ -12,7 +12,7 @@ from utils.hints import (
     HINT_MODE_OPTIONS,
 )
 from utils.sm2 import update_sm2, map_grade_to_quality
-from utils.mastery import mastery_status_from_streak
+from utils.mastery import mastery_status_from_rules, get_deck_mastery_rules
 from config import load_config
 import sqlite3
 from typing import Optional, Dict
@@ -252,7 +252,13 @@ async def submit_review(
     new_interval, new_ef, new_streak, new_due = update_sm2(
         card['interval_days'], card['ease_factor'], quality, card['streak']
     )
-    mastery_status = mastery_status_from_streak(new_streak)
+    mastery_rules = get_deck_mastery_rules(conn, deck_id)
+    mastery_status = mastery_status_from_rules(
+        new_streak,
+        new_ef,
+        new_interval,
+        mastery_rules,
+    )
     cursor.execute("""
         UPDATE cards
         SET interval_days = ?, ease_factor = ?, streak = ?, due_date = ?, mastery_status = ?

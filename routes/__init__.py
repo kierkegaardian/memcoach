@@ -7,5 +7,6 @@ from .stats import router as stats_router
 from .plan import router as plan_router
 from .backups import router as backups_router
 from .today import router as today_router
+from .reports import router as reports_router
 
-__all__ = ['kids_router', 'decks_router', 'cards_router', 'review_router', 'stats_router', 'plan_router', 'backups_router', 'today_router']
+__all__ = ['kids_router', 'decks_router', 'cards_router', 'review_router', 'stats_router', 'plan_router', 'backups_router', 'today_router', 'reports_router']
