@@ -68,3 +68,9 @@ def build_hint_text(full_text: str, mode: str) -> str:
     if mode == "line_by_line":
         return _line_by_line(full_text)
     return ""
+
+def build_cloze_text(full_text: str, nth: int = EVERY_NTH_WORD_DEFAULT) -> str:
+    return _mask_words_every_nth(full_text, nth)
+
+def build_first_letters_text(full_text: str) -> str:
+    return _first_letters(full_text)

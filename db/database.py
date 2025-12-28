@@ -26,6 +26,8 @@ def init_db():
         ensure_card_position(conn)
         ensure_cards_fts(conn)
         ensure_review_duration(conn)
+        ensure_deck_review_mode(conn)
+        ensure_review_review_mode(conn)
         ensure_assignment_defaults(conn)
         ensure_schema_version(conn)
         conn.commit()
@@ -89,6 +91,26 @@ def ensure_review_duration(conn: sqlite3.Connection) -> None:
     columns = {row[1] for row in cursor.fetchall()}
     if "duration_seconds" not in columns:
         cursor.execute("ALTER TABLE reviews ADD COLUMN duration_seconds INTEGER")
+
+def ensure_deck_review_mode(conn: sqlite3.Connection) -> None:
+    """Ensure decks table has review_mode column."""
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(decks)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if "review_mode" not in columns:
+        cursor.execute(
+            "ALTER TABLE decks ADD COLUMN review_mode TEXT NOT NULL DEFAULT 'free_recall'"
+        )
+
+def ensure_review_review_mode(conn: sqlite3.Connection) -> None:
+    """Ensure reviews table has review_mode column."""
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(reviews)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if "review_mode" not in columns:
+        cursor.execute(
+            "ALTER TABLE reviews ADD COLUMN review_mode TEXT NOT NULL DEFAULT 'free_recall'"
+        )
 
 def ensure_assignment_defaults(conn: sqlite3.Connection) -> None:
     """Ensure default assignments exist for all kid/deck pairs."""

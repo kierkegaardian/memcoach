@@ -1,6 +1,6 @@
 # SQL schema for MemCoach database
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA_SQL = """
 -- Kids
@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS kids (
 CREATE TABLE IF NOT EXISTS decks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
+    review_mode TEXT NOT NULL DEFAULT 'free_recall' CHECK(review_mode IN ('free_recall', 'recitation', 'cloze', 'first_letters')),
     deleted_at TEXT
 );
 
@@ -125,6 +126,7 @@ CREATE TABLE IF NOT EXISTS reviews (
     kid_id INTEGER NOT NULL,
     ts TEXT NOT NULL DEFAULT (datetime('now')),
     grade TEXT NOT NULL CHECK(grade IN ('perfect', 'good', 'fail')),
+    review_mode TEXT NOT NULL DEFAULT 'free_recall' CHECK(review_mode IN ('free_recall', 'recitation', 'cloze', 'first_letters')),
     hint_mode TEXT NOT NULL DEFAULT 'none',
     user_text TEXT,
     duration_seconds INTEGER,

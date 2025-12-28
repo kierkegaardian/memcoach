@@ -4,7 +4,13 @@ from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from db.database import get_db
 from utils.grading import grade_recall
-from utils.hints import build_hint_text, normalize_hint_mode, HINT_MODE_OPTIONS
+from utils.hints import (
+    build_hint_text,
+    build_cloze_text,
+    build_first_letters_text,
+    normalize_hint_mode,
+    HINT_MODE_OPTIONS,
+)
 from utils.sm2 import update_sm2, map_grade_to_quality
 from utils.mastery import mastery_status_from_streak
 from config import load_config
@@ -15,6 +21,17 @@ from datetime import datetime, timezone
 router = APIRouter()
 base_dir = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
+
+def get_deck_review_mode(conn, deck_id: int) -> str:
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT review_mode FROM decks WHERE id = ? AND deleted_at IS NULL",
+        (deck_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    return row[0] or "free_recall"
 
 def get_next_card_for_review(kid_id: int, deck_id: int, conn, group_texts: bool = False) -> Optional[Dict]:
     """Get next due card for kid and deck (simple: due and not reviewed today)."""
@@ -89,11 +106,11 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
     if not kid_row:
         raise HTTPException(status_code=404, detail="Kid not found")
     kid = {"id": kid_row[0], "name": kid_row[1]}
-    cursor.execute("SELECT id, name FROM decks WHERE id = ? AND deleted_at IS NULL", (deck_id,))
+    cursor.execute("SELECT id, name, review_mode FROM decks WHERE id = ? AND deleted_at IS NULL", (deck_id,))
     deck_row = cursor.fetchone()
     if not deck_row:
         raise HTTPException(status_code=404, detail="Deck not found")
-    deck = {"id": deck_row[0], "name": deck_row[1]}
+    deck = {"id": deck_row[0], "name": deck_row[1], "review_mode": deck_row[2] or "free_recall"}
     cursor.execute(
         """
         SELECT DISTINCT t.name
@@ -108,8 +125,11 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
     deck_tags = [row[0] for row in cursor.fetchall()]
     hint_mode = normalize_hint_mode(request.query_params.get("hint_mode"))
     group_texts = request.query_params.get("group_texts") == "1"
+    review_mode = deck["review_mode"]
     card = get_next_card_for_review(kid_id, deck_id, conn, group_texts=group_texts)
-    hint_text = build_hint_text(card["full_text"], hint_mode) if card else ""
+    hint_text = build_hint_text(card["full_text"], hint_mode) if card and review_mode == "free_recall" else ""
+    masked_text = build_cloze_text(card["full_text"]) if card and review_mode == "cloze" else ""
+    initials_text = build_first_letters_text(card["full_text"]) if card and review_mode == "first_letters" else ""
     return templates.TemplateResponse(
         "review.html",
         {
@@ -125,6 +145,9 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
             "group_texts": group_texts,
             "deck_tags": deck_tags,
             "started_at": datetime.now(timezone.utc).isoformat(),
+            "review_mode": review_mode,
+            "masked_text": masked_text,
+            "initials_text": initials_text,
         },
     )
 
@@ -133,6 +156,7 @@ async def next_card(kid_id: int, deck_id: int, request: Request, conn = Depends(
     """HTMX endpoint for next card partial."""
     hint_mode = normalize_hint_mode(request.query_params.get("hint_mode"))
     group_texts = request.query_params.get("group_texts") == "1"
+    review_mode = get_deck_review_mode(conn, deck_id)
     card = get_next_card_for_review(kid_id, deck_id, conn, group_texts=group_texts)
     if card:
         return templates.TemplateResponse(
@@ -143,10 +167,13 @@ async def next_card(kid_id: int, deck_id: int, request: Request, conn = Depends(
                 "kid_id": kid_id,
                 "deck_id": deck_id,
                 "hint_mode": hint_mode,
-                "hint_text": build_hint_text(card["full_text"], hint_mode),
+                "hint_text": build_hint_text(card["full_text"], hint_mode) if review_mode == "free_recall" else "",
                 "hint_modes": HINT_MODE_OPTIONS,
                 "group_texts": group_texts,
                 "started_at": datetime.now(timezone.utc).isoformat(),
+                "review_mode": review_mode,
+                "masked_text": build_cloze_text(card["full_text"]) if review_mode == "cloze" else "",
+                "initials_text": build_first_letters_text(card["full_text"]) if review_mode == "first_letters" else "",
             },
         )
     else:
@@ -175,8 +202,9 @@ async def submit_review(
     deck_id: int,
     card_id: int,
     request: Request,
-    user_text: str = Form(...),
+    user_text: str = Form(""),
     hint_mode: str = Form("none"),
+    parent_grade: Optional[str] = Form(None),
     group_texts: str = Form("0"),
     started_at: Optional[str] = Form(None),
     conn = Depends(get_db),
@@ -184,6 +212,11 @@ async def submit_review(
     """HTMX endpoint to grade recall, update card/review, return result partial."""
     config = load_config()
     cursor = conn.cursor()
+    cursor.execute("SELECT review_mode FROM decks WHERE id = ? AND deleted_at IS NULL", (deck_id,))
+    deck_row = cursor.fetchone()
+    if not deck_row:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    review_mode = deck_row[0] or "free_recall"
     cursor.execute("SELECT * FROM cards WHERE id = ? AND deleted_at IS NULL", (card_id,))
     card_row = cursor.fetchone()
     if not card_row:
@@ -191,8 +224,25 @@ async def submit_review(
     card = dict(card_row)
     full_text = card['full_text']
     hint_mode = normalize_hint_mode(hint_mode)
-    grade = grade_recall(full_text, user_text, config)
-    quality = map_grade_to_quality(grade)
+    if review_mode == "recitation":
+        if parent_grade is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Parent grade required")
+        try:
+            quality = int(parent_grade)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid parent grade")
+        if quality < 0 or quality > 5:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid parent grade")
+        if quality >= 4:
+            grade = "perfect"
+        elif quality >= 3:
+            grade = "good"
+        else:
+            grade = "fail"
+        user_text = user_text or ""
+    else:
+        grade = grade_recall(full_text, user_text, config)
+        quality = map_grade_to_quality(grade)
     new_interval, new_ef, new_streak, new_due = update_sm2(
         card['interval_days'], card['ease_factor'], quality, card['streak']
     )
@@ -212,9 +262,9 @@ async def submit_review(
         except ValueError:
             duration_seconds = None
     cursor.execute("""
-        INSERT INTO reviews (card_id, kid_id, grade, user_text, hint_mode, duration_seconds)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (card_id, kid_id, grade, user_text, hint_mode, duration_seconds))
+        INSERT INTO reviews (card_id, kid_id, grade, review_mode, user_text, hint_mode, duration_seconds)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (card_id, kid_id, grade, review_mode, user_text, hint_mode, duration_seconds))
     conn.commit()
     color_class = {
         'perfect': 'bg-green-100 border-green-400 text-green-800',
