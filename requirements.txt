@@ -5,3 +5,5 @@ python-multipart
 python-levenshtein  # or Levenshtein, but pip levenshtein
 python-dotenv
 tomli  # Fallback for older Python if needed, but 3.11 has tomllib
+pytest
+httpx
