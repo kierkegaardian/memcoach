@@ -27,6 +27,10 @@
 {% block content %}
 <div class="max-w-2xl mx-auto">
     <h2 class="text-3xl font-bold mb-6">Review Session: {{ deck.name }} for {{ kid.name }}</h2>
+    <div class="flex items-center gap-2 mb-4 text-sm text-gray-600">
+        <input type="checkbox" id="group-texts-toggle" class="h-4 w-4" {% if group_texts %}checked{% endif %}>
+        <label for="group-texts-toggle">Keep chunks grouped by parent text</label>
+    </div>
     <div id="result"></div>
     <div id="card-container">
         {% if card %}
@@ -47,5 +51,13 @@
             console.log('Card reviewed!');
         }
     });
+    const groupToggle = document.getElementById('group-texts-toggle');
+    if (groupToggle) {
+        groupToggle.addEventListener('change', function() {
+            const url = new URL(window.location.href);
+            url.searchParams.set('group_texts', groupToggle.checked ? 'true' : 'false');
+            window.location.href = url.toString();
+        });
+    }
 </script>
 {% endblock %}

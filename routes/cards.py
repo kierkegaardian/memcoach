@@ -5,7 +5,8 @@ from pathlib import Path
 from db.database import get_db
 from models.card import CardCreate
 import sqlite3
-from typing import Optional
+from typing import Optional, List
+import re
 
 router = APIRouter()
 base_dir = Path(__file__).resolve().parent.parent
@@ -29,6 +30,11 @@ async def add_cards(
     full_text: Optional[str] = Form(None, description="Full text for manual card"),
     file: Optional[UploadFile] = File(None, description="TXT file for multiple cards"),
     prompt_base: Optional[str] = Form("Recite: ", description="Prompt base for uploaded cards"),
+    long_title: Optional[str] = Form(None, description="Title for long text"),
+    long_text: Optional[str] = Form(None, description="Long text to chunk"),
+    chunk_method: Optional[str] = Form(None, description="Chunking method"),
+    custom_delimiter: Optional[str] = Form(None, description="Custom delimiter"),
+    long_prompt_base: Optional[str] = Form("Recite: ", description="Prompt base for long text chunks"),
     kid_id: Optional[int] = Form(None, description="Kid ID for redirect"),
     conn = Depends(get_db)
 ):
@@ -36,7 +42,33 @@ async def add_cards(
     cursor = conn.cursor()
     added = 0
     try:
-        if file and file.filename:
+        if long_title and long_text:
+            method = (chunk_method or "stanzas").lower()
+            if method == "custom" and not custom_delimiter:
+                raise HTTPException(status_code=400, detail="Custom delimiter required for custom chunking")
+            chunks = split_long_text(long_text, method, custom_delimiter)
+            if not chunks:
+                raise HTTPException(status_code=400, detail="No chunks found for the long text")
+            cursor.execute(
+                """
+                INSERT INTO texts (deck_id, title, full_text)
+                VALUES (?, ?, ?)
+                """,
+                (deck_id, long_title.strip(), long_text.strip()),
+            )
+            text_id = cursor.lastrowid
+            total = len(chunks)
+            for idx, chunk in enumerate(chunks, 1):
+                prompt_text = f"{long_prompt_base}{long_title} (Part {idx} of {total})"
+                cursor.execute(
+                    """
+                    INSERT INTO cards (deck_id, prompt, full_text, text_id, chunk_index, interval_days, due_date, ease_factor, streak)
+                    VALUES (?, ?, ?, ?, ?, 1, date('now'), 2.5, 0)
+                    """,
+                    (deck_id, prompt_text, chunk, text_id, idx),
+                )
+                added += 1
+        elif file and file.filename:
             if not file.filename.endswith('.txt'):
                 raise HTTPException(status_code=400, detail="File must be .txt")
             content = await file.read()
@@ -63,3 +95,19 @@ async def add_cards(
         return RedirectResponse(url=redirect_target, status_code=status.HTTP_303_SEE_OTHER)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to add cards: {str(e)}")
+
+
+def split_long_text(text: str, method: str, custom_delimiter: Optional[str]) -> List[str]:
+    cleaned = text.strip()
+    if not cleaned:
+        return []
+    if method == "lines":
+        chunks = [line.strip() for line in cleaned.splitlines() if line.strip()]
+    elif method == "sentences":
+        parts = re.split(r"(?<=[.!?])\s+", cleaned)
+        chunks = [part.strip() for part in parts if part.strip()]
+    elif method == "custom" and custom_delimiter:
+        chunks = [part.strip() for part in cleaned.split(custom_delimiter) if part.strip()]
+    else:
+        chunks = [block.strip() for block in cleaned.split("\n\n") if block.strip()]
+    return chunks

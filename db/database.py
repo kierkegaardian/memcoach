@@ -12,6 +12,7 @@ def init_db():
     CONFIG_DIR.mkdir(exist_ok=True)
     with get_conn() as conn:
         conn.executescript(SCHEMA_SQL)
+        ensure_schema_updates(conn)
         conn.executescript(INDEXES_SQL)
         conn.commit()
 
@@ -29,3 +30,28 @@ def get_db():
     """FastAPI dependency that yields a DB connection and closes it afterwards."""
     with get_conn() as conn:
         yield conn
+
+
+def ensure_schema_updates(conn: sqlite3.Connection) -> None:
+    """Apply lightweight schema updates for existing databases."""
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='texts'")
+    if cursor.fetchone() is None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS texts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                deck_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                full_text TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE
+            )
+            """
+        )
+    cursor.execute("PRAGMA table_info(cards)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if "text_id" not in columns:
+        conn.execute("ALTER TABLE cards ADD COLUMN text_id INTEGER")
+    if "chunk_index" not in columns:
+        conn.execute("ALTER TABLE cards ADD COLUMN chunk_index INTEGER")

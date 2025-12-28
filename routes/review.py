@@ -13,25 +13,46 @@ router = APIRouter()
 base_dir = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 
-def get_next_card_for_review(kid_id: int, deck_id: int, conn) -> Optional[Dict]:
+def get_next_card_for_review(kid_id: int, deck_id: int, conn, group_texts: bool = False) -> Optional[Dict]:
     """Get next due card for kid and deck (simple: due and not reviewed today)."""
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT c.* FROM cards c
+    order_clause = "c.due_date ASC, random()"
+    if group_texts:
+        order_clause = "c.due_date ASC, CASE WHEN c.text_id IS NULL THEN 1 ELSE 0 END, c.text_id ASC, c.chunk_index ASC"
+    cursor.execute(
+        f"""
+        SELECT
+            c.*,
+            t.title AS text_title,
+            CASE
+                WHEN c.text_id IS NOT NULL THEN (
+                    SELECT COUNT(*) FROM cards c2 WHERE c2.text_id = c.text_id
+                )
+            END AS chunk_total
+        FROM cards c
+        LEFT JOIN texts t ON t.id = c.text_id
         WHERE c.deck_id = ? AND c.due_date <= date('now')
         AND NOT EXISTS (
             SELECT 1 FROM reviews r WHERE r.card_id = c.id AND r.kid_id = ? AND date(r.ts) = date('now')
         )
-        ORDER BY c.due_date ASC, random()
+        ORDER BY {order_clause}
         LIMIT 1
-    """, (deck_id, kid_id))
+        """,
+        (deck_id, kid_id),
+    )
     row = cursor.fetchone()
     if row:
         return dict(row)
     return None
 
 @router.get("/{kid_id}/{deck_id}", response_class=HTMLResponse)
-async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depends(get_db)):
+async def start_review(
+    kid_id: int,
+    deck_id: int,
+    request: Request,
+    group_texts: bool = False,
+    conn = Depends(get_db),
+):
     """Start review session for kid and deck."""
     cursor = conn.cursor()
     cursor.execute("SELECT id, name FROM kids WHERE id = ?", (kid_id,))
@@ -44,20 +65,46 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
     if not deck_row:
         raise HTTPException(status_code=404, detail="Deck not found")
     deck = {"id": deck_row[0], "name": deck_row[1]}
-    card = get_next_card_for_review(kid_id, deck_id, conn)
+    card = get_next_card_for_review(kid_id, deck_id, conn, group_texts=group_texts)
     return templates.TemplateResponse(
         "review.html",
-        {"request": request, "kid": kid, "deck": deck, "card": card, "kid_id": kid_id, "deck_id": deck_id}
+        {
+            "request": request,
+            "kid": kid,
+            "deck": deck,
+            "card": card,
+            "kid_id": kid_id,
+            "deck_id": deck_id,
+            "group_texts": group_texts,
+        },
     )
 
 @router.get("/next")
-async def next_card(kid_id: int, deck_id: int, request: Request, conn = Depends(get_db)):
+async def next_card(
+    kid_id: int,
+    deck_id: int,
+    request: Request,
+    group_texts: bool = False,
+    conn = Depends(get_db),
+):
     """HTMX endpoint for next card partial."""
-    card = get_next_card_for_review(kid_id, deck_id, conn)
+    card = get_next_card_for_review(kid_id, deck_id, conn, group_texts=group_texts)
     if card:
-        return templates.TemplateResponse("partials/card.html", {"request": request, "card": card, "kid_id": kid_id, "deck_id": deck_id})
+        return templates.TemplateResponse(
+            "partials/card.html",
+            {
+                "request": request,
+                "card": card,
+                "kid_id": kid_id,
+                "deck_id": deck_id,
+                "group_texts": group_texts,
+            },
+        )
     else:
-        return templates.TemplateResponse("partials/no_cards.html", {"request": request, "kid_id": kid_id, "deck_id": deck_id})
+        return templates.TemplateResponse(
+            "partials/no_cards.html",
+            {"request": request, "kid_id": kid_id, "deck_id": deck_id},
+        )
 
 @router.post("/submit")
 async def submit_review(
@@ -66,6 +113,7 @@ async def submit_review(
     card_id: int,
     request: Request,
     user_text: str = Form(...),
+    group_texts: bool = False,
     conn = Depends(get_db),
 ):
     """HTMX endpoint to grade recall, update card/review, return result partial."""
@@ -104,5 +152,6 @@ async def submit_review(
             "full_text": full_text,
             "kid_id": kid_id,
             "deck_id": deck_id,
+            "group_texts": group_texts,
         },
     )

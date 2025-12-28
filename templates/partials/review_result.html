@@ -3,7 +3,7 @@
   <p><strong>You typed:</strong> {{ user_text }}</p>
   <p><strong>Correct:</strong> {{ full_text }}</p>
   <button
-    hx-get="/review/next?kid_id={{ kid_id }}&deck_id={{ deck_id }}"
+    hx-get="/review/next?kid_id={{ kid_id }}&deck_id={{ deck_id }}&group_texts={{ 'true' if group_texts else 'false' }}"
     hx-target="#card-container"
     hx-swap="innerHTML"
     class="bg-blue-500 text-white px-4 py-2 rounded mt-2 hover:bg-blue-600"
