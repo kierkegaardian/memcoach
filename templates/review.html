@@ -27,6 +27,9 @@
 {% block content %}
 <div class="max-w-2xl mx-auto">
     <h2 class="text-3xl font-bold mb-6">Review Session: {{ deck.name }} for {{ kid.name }}</h2>
+    <p class="text-gray-600 mb-4">
+        Pick a hint style for this session: no hints, first letters, every Nth word, or line-by-line.
+    </p>
     <div id="result"></div>
     <div id="card-container">
         {% if card %}

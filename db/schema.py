@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS reviews (
     kid_id INTEGER NOT NULL,
     ts TEXT NOT NULL DEFAULT (datetime('now')),
     grade TEXT NOT NULL CHECK(grade IN ('perfect', 'good', 'fail')),
+    hint_mode TEXT NOT NULL DEFAULT 'none',
     user_text TEXT,
     FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE,
     FOREIGN KEY (kid_id) REFERENCES kids (id) ON DELETE CASCADE
