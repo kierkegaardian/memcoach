@@ -7,8 +7,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from db.database import get_db
+from utils.auth import require_parent_session
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_parent_session)])
 base_dir = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 

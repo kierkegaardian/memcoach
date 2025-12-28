@@ -5,7 +5,7 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -18,8 +18,9 @@ from db.database import (
     get_schema_version_from_db,
 )
 from db.schema import SCHEMA_VERSION
+from utils.auth import require_parent_session
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_parent_session)])
 base_dir = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 

@@ -15,7 +15,8 @@ sys.path.insert(0, str(base_dir))
 
 from db.database import init_db, get_db
 from config import load_config, CONFIG_DIR
-from routes import kids, decks, cards, review, stats, plan, backups, trash, search  # Import routers
+from routes import kids, decks, cards, review, stats, plan, backups, trash, search, parent, kid_mode  # Import routers
+from utils.auth import is_parent_unlocked
 
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 app = FastAPI(title="MemCoach", description="Local-first memorization app for kids")
@@ -32,6 +33,14 @@ app.include_router(plan.router, prefix="/plan", tags=["plan"])
 app.include_router(backups.router, prefix="/admin", tags=["admin"])
 app.include_router(trash.router, prefix="/trash", tags=["trash"])
 app.include_router(search.router, tags=["search"])
+app.include_router(parent.router, prefix="/parent", tags=["parent"])
+app.include_router(kid_mode.router, prefix="/kid-mode", tags=["kid-mode"])
+
+@app.middleware("http")
+async def parent_session_middleware(request: Request, call_next):
+    request.state.parent_unlocked = is_parent_unlocked(request)
+    response = await call_next(request)
+    return response
 
 # Dependency for DB connection
 def get_db_conn():

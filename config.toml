@@ -9,3 +9,9 @@ levenshtein_good_threshold = 0.85
 
 # Require LLM confirmation for borderline cases
 use_llm_on_borderline = true
+
+[parent]
+# Store a hashed PIN (generate with utils.auth.hash_pin) to unlock admin routes.
+pin_hash = ""
+# Optional: minutes to keep the parent session cookie valid.
+session_minutes = 30

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Kid Mode - MemCoach{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto text-center">
+    <h2 class="text-3xl font-bold mb-4 text-gray-800">Kid Mode</h2>
+    <p class="text-gray-600 mb-6">Choose your name to start reviewing.</p>
+    {% if kids %}
+        <ul class="space-y-3">
+            {% for kid in kids %}
+                <li class="bg-white shadow rounded p-4">
+                    <a href="/kid-mode/{{ kid.id }}" class="text-blue-600 font-semibold hover:underline">{{ kid.name }}</a>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <div class="bg-yellow-100 p-4 rounded">
+            <p class="text-yellow-800">No kids yet. Ask a parent to add one.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
