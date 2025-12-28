@@ -14,6 +14,7 @@ from utils.hints import (
 from utils.sm2 import update_sm2, map_grade_to_quality
 from utils.mastery import mastery_status_from_rules, get_deck_mastery_rules
 from config import load_config
+from utils.auth import require_parent_session
 import sqlite3
 from typing import Optional, Dict
 from datetime import datetime, timezone
@@ -226,6 +227,7 @@ async def submit_review(
     full_text = card['full_text']
     hint_mode = normalize_hint_mode(hint_mode)
     if review_mode == "recitation":
+        require_parent_session(request)
         if parent_grade is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Parent grade required")
         try:
@@ -334,6 +336,7 @@ async def override_review_grade(
     conn = Depends(get_db),
 ):
     """HTMX endpoint to override auto-grade with parent input."""
+    require_parent_session(request)
     if grade not in {"perfect", "good", "fail"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid grade")
     cursor = conn.cursor()

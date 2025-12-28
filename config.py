@@ -1,5 +1,6 @@
 import tomllib
 import shutil
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 from dotenv import load_dotenv
@@ -55,3 +56,33 @@ def get_config_value(section: str, key: str, default: Optional[Any] = None) -> A
     config = load_config()
     value = config.get(section, {}).get(key, default)
     return value
+
+
+def set_parent_pin_hash(pin_hash: str) -> None:
+    """Persist parent PIN hash into config.toml."""
+    load_config()
+    text = CONFIG_PATH.read_text()
+    if "[parent]" not in text:
+        text = text.rstrip() + f'\n\n[parent]\npin_hash = "{pin_hash}"\n'
+        CONFIG_PATH.write_text(text)
+        return
+
+    def update_section(match: re.Match) -> str:
+        section = match.group(1)
+        rest = match.group(2)
+        if re.search(r"^pin_hash\\s*=", section, flags=re.MULTILINE):
+            section = re.sub(
+                r"^pin_hash\\s*=.*$",
+                f'pin_hash = "{pin_hash}"',
+                section,
+                flags=re.MULTILINE,
+            )
+        else:
+            lines = section.rstrip().splitlines()
+            insert_at = 1 if lines else 0
+            lines.insert(insert_at, f'pin_hash = "{pin_hash}"')
+            section = "\n".join(lines) + "\n"
+        return section + rest
+
+    text = re.sub(r"(?ms)(^\\[parent\\].*?)(^\\[|\\Z)", update_section, text)
+    CONFIG_PATH.write_text(text)

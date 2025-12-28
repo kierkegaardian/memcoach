@@ -281,6 +281,8 @@ async def submit_today_review(
     if not card_row:
         raise HTTPException(status_code=404, detail="Card not found")
     card = dict(card_row)
+    if card["deck_id"] != deck_id:
+        raise HTTPException(status_code=400, detail="Deck does not match card")
     full_text = card["full_text"]
     hint_mode = normalize_hint_mode(hint_mode)
     grade = grade_recall(full_text, user_text, config)
@@ -288,7 +290,7 @@ async def submit_today_review(
     new_interval, new_ef, new_streak, new_due = update_sm2(
         card["interval_days"], card["ease_factor"], quality, card["streak"]
     )
-    mastery_rules = get_deck_mastery_rules(conn, deck_id)
+    mastery_rules = get_deck_mastery_rules(conn, card["deck_id"])
     mastery_status = mastery_status_from_rules(
         new_streak,
         new_ef,
