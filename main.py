@@ -15,7 +15,7 @@ sys.path.insert(0, str(base_dir))
 
 from db.database import init_db, get_db
 from config import load_config, CONFIG_DIR
-from routes import kids, decks, cards, review, stats, plan  # Import routers
+from routes import kids, decks, cards, review, stats, plan, backups  # Import routers
 
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 app = FastAPI(title="MemCoach", description="Local-first memorization app for kids")
@@ -29,6 +29,7 @@ app.include_router(cards.router, prefix="/decks", tags=["cards"])  # /decks/{dec
 app.include_router(review.router, prefix="/review", tags=["review"])
 app.include_router(stats.router, prefix="/stats", tags=["stats"])
 app.include_router(plan.router, prefix="/plan", tags=["plan"])
+app.include_router(backups.router, prefix="/admin", tags=["admin"])
 
 # Dependency for DB connection
 def get_db_conn():
@@ -46,8 +47,8 @@ async def home(request: Request, conn = Depends(get_db_conn)):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: init DB and config
-    init_db()
     load_config()  # Ensures config exists
+    init_db()
     yield
     # Shutdown if needed
 
@@ -59,8 +60,8 @@ if __name__ == "__main__":
     parser.add_argument("--dev", action="store_true", help="Run in dev mode with reload")
     args = parser.parse_args()
     if args.init:
-        init_db()
         load_config()  # Ensures config is copied if missing
+        init_db()
         print("DB initialized and config copied to ~/.memcoach/")
         exit(0)
     # Run server

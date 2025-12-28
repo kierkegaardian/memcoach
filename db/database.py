@@ -1,11 +1,18 @@
+import io
+import json
 import sqlite3
+import zipfile
 from contextlib import contextmanager
+from datetime import date, datetime, timezone
 from pathlib import Path
 
-from .schema import SCHEMA_SQL, INDEXES_SQL
+from config import CONFIG_PATH
+from .schema import SCHEMA_SQL, INDEXES_SQL, SCHEMA_VERSION
 
 CONFIG_DIR = Path.home() / ".memcoach"
 DB_PATH = CONFIG_DIR / "memcoach.db"
+BACKUP_DIR = CONFIG_DIR / "backups"
+BACKUP_KEEP = 7
 
 def init_db():
     """Initialize the database by creating tables and indexes if they don't exist."""
@@ -15,7 +22,9 @@ def init_db():
         conn.executescript(INDEXES_SQL)
         ensure_card_mastery_status(conn)
         ensure_card_chunk_fields(conn)
+        ensure_schema_version(conn)
         conn.commit()
+    run_daily_backup()
 
 def ensure_card_mastery_status(conn: sqlite3.Connection) -> None:
     """Ensure cards table has mastery_status column for existing installs."""
@@ -36,6 +45,84 @@ def ensure_card_chunk_fields(conn: sqlite3.Connection) -> None:
         cursor.execute("ALTER TABLE cards ADD COLUMN text_id INTEGER")
     if "chunk_index" not in columns:
         cursor.execute("ALTER TABLE cards ADD COLUMN chunk_index INTEGER")
+
+def get_schema_version(conn: sqlite3.Connection) -> int:
+    """Read the SQLite schema version from PRAGMA user_version."""
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA user_version")
+    row = cursor.fetchone()
+    return int(row[0]) if row else 0
+
+def set_schema_version(conn: sqlite3.Connection, version: int) -> None:
+    """Set the SQLite schema version via PRAGMA user_version."""
+    conn.execute(f"PRAGMA user_version = {int(version)}")
+
+def ensure_schema_version(conn: sqlite3.Connection) -> None:
+    """Ensure the current schema version is written to the database."""
+    current = get_schema_version(conn)
+    if current != SCHEMA_VERSION:
+        set_schema_version(conn, SCHEMA_VERSION)
+
+def get_schema_version_from_db() -> int:
+    """Get the schema version from the on-disk database."""
+    if not DB_PATH.exists():
+        return SCHEMA_VERSION
+    with get_conn() as conn:
+        return get_schema_version(conn)
+
+def build_backup_manifest(schema_version: int) -> dict:
+    """Build a manifest for backups with timestamp and schema version."""
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "schema_version": schema_version,
+    }
+
+def create_backup_archive_bytes(schema_version: int) -> bytes:
+    """Create a backup zip archive in memory."""
+    if not DB_PATH.exists():
+        raise FileNotFoundError("memcoach.db not found")
+    if not CONFIG_PATH.exists():
+        raise FileNotFoundError("config.toml not found")
+    manifest = build_backup_manifest(schema_version)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
+        zipf.writestr("manifest.json", json.dumps(manifest, indent=2))
+        zipf.write(DB_PATH, arcname="memcoach.db")
+        zipf.write(CONFIG_PATH, arcname="config.toml")
+    buffer.seek(0)
+    return buffer.read()
+
+def create_backup_archive_file(destination: Path, schema_version: int) -> None:
+    """Create a backup zip archive at the given destination."""
+    if not DB_PATH.exists():
+        raise FileNotFoundError("memcoach.db not found")
+    if not CONFIG_PATH.exists():
+        raise FileNotFoundError("config.toml not found")
+    manifest = build_backup_manifest(schema_version)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
+        zipf.writestr("manifest.json", json.dumps(manifest, indent=2))
+        zipf.write(DB_PATH, arcname="memcoach.db")
+        zipf.write(CONFIG_PATH, arcname="config.toml")
+
+def run_daily_backup() -> None:
+    """Create a daily rolling backup of the DB/config and prune old archives."""
+    if not DB_PATH.exists() or not CONFIG_PATH.exists():
+        return
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    today = date.today()
+    existing = sorted(BACKUP_DIR.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+    if existing:
+        latest_date = date.fromtimestamp(existing[0].stat().st_mtime)
+        if latest_date == today:
+            return
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    backup_path = BACKUP_DIR / f"backup-{timestamp}.zip"
+    schema_version = get_schema_version_from_db()
+    create_backup_archive_file(backup_path, schema_version)
+    existing = sorted(BACKUP_DIR.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+    for old_backup in existing[BACKUP_KEEP:]:
+        old_backup.unlink(missing_ok=True)
 
 @contextmanager
 def get_conn():
