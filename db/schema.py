@@ -1,6 +1,6 @@
 # SQL schema for MemCoach database
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA_SQL = """
 -- Kids
@@ -57,6 +57,53 @@ CREATE TABLE IF NOT EXISTS cards (
     FOREIGN KEY (text_id) REFERENCES texts (id) ON DELETE SET NULL
 );
 
+-- Card search (FTS5)
+CREATE VIRTUAL TABLE IF NOT EXISTS cards_fts USING fts5(
+    prompt,
+    full_text,
+    content='cards',
+    content_rowid='id'
+);
+
+CREATE TRIGGER IF NOT EXISTS cards_ai AFTER INSERT ON cards BEGIN
+    INSERT INTO cards_fts(rowid, prompt, full_text)
+    VALUES (new.id, new.prompt, new.full_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS cards_ad AFTER DELETE ON cards BEGIN
+    INSERT INTO cards_fts(cards_fts, rowid, prompt, full_text)
+    VALUES ('delete', old.id, old.prompt, old.full_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS cards_au AFTER UPDATE ON cards BEGIN
+    INSERT INTO cards_fts(cards_fts, rowid, prompt, full_text)
+    VALUES ('delete', old.id, old.prompt, old.full_text);
+    INSERT INTO cards_fts(rowid, prompt, full_text)
+    VALUES (new.id, new.prompt, new.full_text);
+END;
+
+-- Tags
+CREATE TABLE IF NOT EXISTS tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS deck_tags (
+    deck_id INTEGER NOT NULL,
+    tag_id INTEGER NOT NULL,
+    PRIMARY KEY (deck_id, tag_id),
+    FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS card_tags (
+    card_id INTEGER NOT NULL,
+    tag_id INTEGER NOT NULL,
+    PRIMARY KEY (card_id, tag_id),
+    FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE
+);
+
 -- Review log
 CREATE TABLE IF NOT EXISTS reviews (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,4 +132,9 @@ CREATE INDEX IF NOT EXISTS idx_kids_deleted ON kids (deleted_at);
 CREATE INDEX IF NOT EXISTS idx_decks_deleted ON decks (deleted_at);
 CREATE INDEX IF NOT EXISTS idx_reviews_card_kid ON reviews (card_id, kid_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_ts ON reviews (ts);
+CREATE INDEX IF NOT EXISTS idx_tags_name ON tags (name);
+CREATE INDEX IF NOT EXISTS idx_deck_tags_deck ON deck_tags (deck_id);
+CREATE INDEX IF NOT EXISTS idx_deck_tags_tag ON deck_tags (tag_id);
+CREATE INDEX IF NOT EXISTS idx_card_tags_card ON card_tags (card_id);
+CREATE INDEX IF NOT EXISTS idx_card_tags_tag ON card_tags (tag_id);
 """

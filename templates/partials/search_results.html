@@ -1,0 +1,28 @@
+{% if cards %}
+    <ul class="divide-y divide-gray-200">
+        {% for card in cards %}
+            <li class="py-3">
+                <div class="flex flex-col gap-2">
+                    <div>
+                        <p class="font-medium text-gray-800">{{ card.prompt }}</p>
+                        <p class="text-sm text-gray-500">{{ card.full_text }}</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 text-sm text-gray-500">
+                        <span>Deck: {{ card.deck_name }}</span>
+                        <span>Due: {{ card.due_date }}</span>
+                        <span class="uppercase tracking-wide font-semibold text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">{{ card.mastery_status }}</span>
+                    </div>
+                    {% if card.tags %}
+                        <div class="flex flex-wrap gap-2">
+                            {% for tag in card.tags %}
+                                <span class="text-xs font-semibold uppercase tracking-wide px-2 py-1 rounded bg-slate-100 text-slate-700">{{ tag }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p class="text-sm text-gray-500">No matching cards found.</p>
+{% endif %}

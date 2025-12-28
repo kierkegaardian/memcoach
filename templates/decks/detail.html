@@ -32,6 +32,39 @@
             <h3 class="text-xl font-semibold">Chunks</h3>
             <a href="/decks/{{ deck.id }}/add{% if kid_id %}?kid_id={{ kid_id }}{% endif %}" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">Add Cards</a>
         </div>
+        <div class="border rounded-lg p-4 bg-gray-50 space-y-3">
+            <div>
+                <p class="text-sm font-semibold text-gray-700">Search this deck</p>
+                <p class="text-xs text-gray-500">Filter by tags or search prompt/full text.</p>
+            </div>
+            <form
+                class="space-y-3"
+                hx-get="/search"
+                hx-target="#deck-search-results"
+                hx-trigger="keyup changed delay:300ms, change"
+            >
+                <input type="hidden" name="deck_id" value="{{ deck.id }}">
+                <input
+                    type="text"
+                    name="q"
+                    placeholder="Search cards..."
+                    class="w-full border border-gray-300 rounded px-3 py-2"
+                >
+                {% if deck_tags %}
+                    <div class="flex flex-wrap gap-3">
+                        {% for tag in deck_tags %}
+                            <label class="flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" name="tag" value="{{ tag }}" class="rounded border-gray-300">
+                                <span>{{ tag }}</span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </form>
+            <div id="deck-search-results" class="text-sm text-gray-600">
+                <p class="text-sm text-gray-500">Start typing or select tags to filter.</p>
+            </div>
+        </div>
         {% if cards %}
             {% set deck_id = deck.id %}
             <div id="card-list">

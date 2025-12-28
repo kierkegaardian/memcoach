@@ -15,7 +15,7 @@ sys.path.insert(0, str(base_dir))
 
 from db.database import init_db, get_db
 from config import load_config, CONFIG_DIR
-from routes import kids, decks, cards, review, stats, plan, backups, trash  # Import routers
+from routes import kids, decks, cards, review, stats, plan, backups, trash, search  # Import routers
 
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 app = FastAPI(title="MemCoach", description="Local-first memorization app for kids")
@@ -31,6 +31,7 @@ app.include_router(stats.router, prefix="/stats", tags=["stats"])
 app.include_router(plan.router, prefix="/plan", tags=["plan"])
 app.include_router(backups.router, prefix="/admin", tags=["admin"])
 app.include_router(trash.router, prefix="/trash", tags=["trash"])
+app.include_router(search.router, tags=["search"])
 
 # Dependency for DB connection
 def get_db_conn():

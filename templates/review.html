@@ -40,6 +40,40 @@
             <a href="/review/{{ kid_id }}/{{ deck_id }}?group_texts=1" class="ml-3 text-blue-600 hover:underline">Turn on</a>
         {% endif %}
     </div>
+    <div class="mb-6 border rounded-lg p-4 bg-gray-50 space-y-3">
+        <div>
+            <p class="text-sm font-semibold text-gray-700">Filter today's cards</p>
+            <p class="text-xs text-gray-500">Search prompt/full text or narrow by tags.</p>
+        </div>
+        <form
+            class="space-y-3"
+            hx-get="/search"
+            hx-target="#today-search-results"
+            hx-trigger="keyup changed delay:300ms, change"
+        >
+            <input type="hidden" name="deck_id" value="{{ deck_id }}">
+            <input type="hidden" name="due_today" value="1">
+            <input
+                type="text"
+                name="q"
+                placeholder="Search today's cards..."
+                class="w-full border border-gray-300 rounded px-3 py-2"
+            >
+            {% if deck_tags %}
+                <div class="flex flex-wrap gap-3">
+                    {% for tag in deck_tags %}
+                        <label class="flex items-center gap-2 text-sm text-gray-700">
+                            <input type="checkbox" name="tag" value="{{ tag }}" class="rounded border-gray-300">
+                            <span>{{ tag }}</span>
+                        </label>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </form>
+        <div id="today-search-results" class="text-sm text-gray-600">
+            <p class="text-sm text-gray-500">Start typing or select tags to filter.</p>
+        </div>
+    </div>
     <div id="result"></div>
     <div id="card-container">
         {% if card %}
