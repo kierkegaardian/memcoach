@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}{{ deck.name }} Progress - MemCoach{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-3xl font-bold text-gray-800">{{ deck.name }}</h2>
+            <p class="text-gray-600">Chunk mastery progress</p>
+        </div>
+        {% if kid_id %}
+            <a href="/kids/{{ kid_id }}/decks" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Back to Decks</a>
+        {% else %}
+            <a href="/decks" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Back to Decks</a>
+        {% endif %}
+    </div>
+
+    <div class="bg-white p-4 rounded shadow">
+        <div class="flex items-center justify-between mb-2">
+            <p class="text-sm text-gray-500">Mastery Progress</p>
+            <p class="text-sm font-semibold text-gray-700">{{ percent_mastered }}%</p>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-3">
+            <div class="bg-green-500 h-3 rounded-full" style="width: {{ percent_mastered }}%;"></div>
+        </div>
+        <p class="text-sm text-gray-600 mt-2">{{ mastered_count }} of {{ total_cards }} chunks mastered</p>
+    </div>
+
+    <div class="bg-white p-4 rounded shadow">
+        <h3 class="text-xl font-semibold mb-3">Chunks</h3>
+        {% if cards %}
+            <ul class="divide-y divide-gray-200">
+                {% for card in cards %}
+                    <li class="py-3 flex items-center justify-between">
+                        <div>
+                            <p class="font-medium text-gray-800">{{ card.prompt }}</p>
+                            <p class="text-sm text-gray-500">Streak: {{ card.streak }} | Due: {{ card.due_date }}</p>
+                        </div>
+                        <span class="text-xs font-semibold uppercase tracking-wide px-2 py-1 rounded
+                            {% if card.mastery_status == 'mastered' %}
+                                bg-green-100 text-green-800
+                            {% elif card.mastery_status == 'learning' %}
+                                bg-yellow-100 text-yellow-800
+                            {% else %}
+                                bg-gray-100 text-gray-700
+                            {% endif %}
+                        ">
+                            {{ card.mastery_status }}
+                        </span>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="text-gray-600">No chunks yet. Add cards to start tracking mastery.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

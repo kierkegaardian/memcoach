@@ -13,7 +13,18 @@ def init_db():
     with get_conn() as conn:
         conn.executescript(SCHEMA_SQL)
         conn.executescript(INDEXES_SQL)
+        ensure_card_mastery_status(conn)
         conn.commit()
+
+def ensure_card_mastery_status(conn: sqlite3.Connection) -> None:
+    """Ensure cards table has mastery_status column for existing installs."""
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(cards)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if "mastery_status" not in columns:
+        cursor.execute(
+            "ALTER TABLE cards ADD COLUMN mastery_status TEXT NOT NULL DEFAULT 'new'"
+        )
 
 @contextmanager
 def get_conn():

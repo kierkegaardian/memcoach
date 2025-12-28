@@ -17,6 +17,7 @@ class Card(CardBase):
     due_date: str  # ISO date
     ease_factor: float = 2.5
     streak: int = 0
+    mastery_status: str = "new"
 
     class Config:
         from_attributes = True

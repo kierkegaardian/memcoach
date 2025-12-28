@@ -60,5 +60,29 @@
             <p class="text-gray-600">No reviews yet for any deck.</p>
         {% endif %}
     </div>
+
+    <div class="bg-white p-4 rounded shadow">
+        <h3 class="text-xl font-semibold mb-3">Chunk Mastery by Deck</h3>
+        {% if deck_mastery %}
+            <ul class="divide-y divide-gray-200">
+                {% for item in deck_mastery %}
+                    <li class="py-3 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="font-medium text-gray-800">{{ item.deck }}</span>
+                            <span class="text-sm text-gray-600">{{ item.percent_mastered }}% mastered</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-green-500 h-2 rounded-full" style="width: {{ item.percent_mastered }}%;"></div>
+                        </div>
+                        <p class="text-sm text-gray-600">
+                            {{ item.mastered }} mastered · {{ item.learning }} learning · {{ item.new }} new ({{ item.total }} total)
+                        </p>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="text-gray-600">No decks available to show mastery yet.</p>
+        {% endif %}
+    </div>
 </div>
 {% endblock %}
