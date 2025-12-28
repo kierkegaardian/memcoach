@@ -1,5 +1,7 @@
 # SQL schema for MemCoach database
 
+SCHEMA_VERSION = 1
+
 SCHEMA_SQL = """
 -- Kids
 CREATE TABLE IF NOT EXISTS kids (
