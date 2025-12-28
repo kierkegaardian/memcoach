@@ -7,8 +7,9 @@ from models.card import CardCreate
 import sqlite3
 from typing import Optional, List
 import re
+from utils.auth import require_parent_session
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_parent_session)])
 base_dir = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 
