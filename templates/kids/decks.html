@@ -6,11 +6,35 @@
 <div class="max-w-4xl mx-auto">
     <h2 class="text-3xl font-bold mb-6">Decks for {{ kid.name }}</h2>
     <a href="/decks/new" class="bg-green-500 text-white px-4 py-2 rounded mb-6 inline-block hover:bg-green-600">+ New Deck</a>
+    {% if deck_tags %}
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+            <p class="text-sm font-semibold text-gray-700 mb-2">Filter decks by tags</p>
+            <form method="get" class="flex flex-wrap gap-3">
+                {% for tag in deck_tags %}
+                    <label class="flex items-center gap-2 text-sm text-gray-700">
+                        <input type="checkbox" name="tag" value="{{ tag }}" class="rounded border-gray-300" {% if tag in selected_tags %}checked{% endif %}>
+                        <span>{{ tag }}</span>
+                    </label>
+                {% endfor %}
+                <button type="submit" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">Apply</button>
+                {% if selected_tags %}
+                    <a href="/kids/{{ kid.id }}/decks" class="text-sm text-blue-600 hover:underline">Clear</a>
+                {% endif %}
+            </form>
+        </div>
+    {% endif %}
     {% if decks %}
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {% for deck in decks %}
                 <div class="bg-white p-6 rounded-lg shadow-md">
                     <h3 class="text-xl font-semibold mb-4">{{ deck.name }}</h3>
+                    {% if deck.tags %}
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            {% for tag in deck.tags %}
+                                <span class="text-xs font-semibold uppercase tracking-wide px-2 py-1 rounded bg-slate-100 text-slate-700">{{ tag }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
                     <div class="space-x-3">
                         <a href="/decks/{{ deck.id }}/add?kid_id={{ kid.id }}" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">Add Cards</a>
                         <a href="/review/{{ kid.id }}/{{ deck.id }}" class="bg-purple-500 text-white px-4 py-2 rounded text-sm hover:bg-purple-600">Start Review</a>

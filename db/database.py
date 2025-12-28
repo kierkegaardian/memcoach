@@ -24,6 +24,7 @@ def init_db():
         ensure_card_chunk_fields(conn)
         ensure_soft_delete_columns(conn)
         ensure_card_position(conn)
+        ensure_cards_fts(conn)
         ensure_schema_version(conn)
         conn.commit()
     run_daily_backup()
@@ -65,6 +66,19 @@ def ensure_card_position(conn: sqlite3.Connection) -> None:
     if "position" not in columns:
         cursor.execute("ALTER TABLE cards ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
     cursor.execute("UPDATE cards SET position = id WHERE position IS NULL OR position = 0")
+
+def ensure_cards_fts(conn: sqlite3.Connection) -> None:
+    """Ensure FTS table is populated for existing cards."""
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='cards_fts'")
+    if not cursor.fetchone():
+        return
+    cursor.execute("SELECT COUNT(*) FROM cards_fts")
+    fts_count = cursor.fetchone()[0] or 0
+    cursor.execute("SELECT COUNT(*) FROM cards")
+    cards_count = cursor.fetchone()[0] or 0
+    if fts_count < cards_count:
+        cursor.execute("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
 
 def get_schema_version(conn: sqlite3.Connection) -> int:
     """Read the SQLite schema version from PRAGMA user_version."""

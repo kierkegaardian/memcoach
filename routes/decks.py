@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Form, Request, HTTPException, status
+from fastapi import APIRouter, Depends, Form, Request, HTTPException, status, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
@@ -32,12 +32,62 @@ async def create_deck(name: str = Form(..., description="Deck name"), conn = Dep
         raise HTTPException(status_code=400, detail="Deck with this name already exists")
 
 @router.get("/", response_class=HTMLResponse)
-async def list_decks(request: Request, conn = Depends(get_db)):
+async def list_decks(
+    request: Request,
+    tag: list[str] = Query(default=[]),
+    conn = Depends(get_db),
+):
     """List all decks."""
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name FROM decks WHERE deleted_at IS NULL ORDER BY name")
-    decks = [dict(row) for row in cursor.fetchall()]
-    return templates.TemplateResponse("decks/index.html", {"request": request, "decks": decks})
+    filters = ["d.deleted_at IS NULL"]
+    params: list[object] = []
+    if tag:
+        placeholders = ",".join("?" for _ in tag)
+        filters.append(
+            f"""
+            d.id IN (
+                SELECT dt.deck_id
+                FROM deck_tags dt
+                JOIN tags t ON t.id = dt.tag_id
+                WHERE t.name IN ({placeholders})
+                GROUP BY dt.deck_id
+                HAVING COUNT(DISTINCT t.name) = ?
+            )
+            """
+        )
+        params.extend(tag)
+        params.append(len(tag))
+    where_clause = " AND ".join(filters)
+    cursor.execute(
+        f"""
+        SELECT d.id, d.name, GROUP_CONCAT(t.name, ',') AS tags
+        FROM decks d
+        LEFT JOIN deck_tags dt ON dt.deck_id = d.id
+        LEFT JOIN tags t ON t.id = dt.tag_id
+        WHERE {where_clause}
+        GROUP BY d.id
+        ORDER BY d.name
+        """,
+        params,
+    )
+    decks = []
+    for row in cursor.fetchall():
+        deck = dict(row)
+        deck["tags"] = [tag for tag in (deck.get("tags") or "").split(",") if tag]
+        decks.append(deck)
+    cursor.execute(
+        """
+        SELECT DISTINCT t.name
+        FROM tags t
+        JOIN deck_tags dt ON dt.tag_id = t.id
+        ORDER BY t.name
+        """
+    )
+    deck_tags = [row[0] for row in cursor.fetchall()]
+    return templates.TemplateResponse(
+        "decks/index.html",
+        {"request": request, "decks": decks, "deck_tags": deck_tags, "selected_tags": tag},
+    )
 
 @router.get("/{deck_id}", response_class=HTMLResponse)
 async def deck_detail(deck_id: int, request: Request, kid_id: Optional[int] = None, conn = Depends(get_db)):
@@ -48,12 +98,38 @@ async def deck_detail(deck_id: int, request: Request, kid_id: Optional[int] = No
         raise HTTPException(status_code=404, detail="Deck not found")
     deck = {"id": deck_row[0], "name": deck_row[1]}
     cursor.execute("""
-        SELECT id, prompt, mastery_status, streak, due_date, position
-        FROM cards
-        WHERE deck_id = ? AND deleted_at IS NULL
-        ORDER BY position, id
+        SELECT
+            c.id,
+            c.prompt,
+            c.mastery_status,
+            c.streak,
+            c.due_date,
+            c.position,
+            GROUP_CONCAT(t.name, ',') AS tags
+        FROM cards c
+        LEFT JOIN card_tags ct ON ct.card_id = c.id
+        LEFT JOIN tags t ON t.id = ct.tag_id
+        WHERE c.deck_id = ? AND c.deleted_at IS NULL
+        GROUP BY c.id
+        ORDER BY c.position, c.id
     """, (deck_id,))
-    cards = [dict(row) for row in cursor.fetchall()]
+    cards = []
+    for row in cursor.fetchall():
+        card = dict(row)
+        card["tags"] = [tag for tag in (card.get("tags") or "").split(",") if tag]
+        cards.append(card)
+    cursor.execute(
+        """
+        SELECT DISTINCT t.name
+        FROM tags t
+        JOIN card_tags ct ON ct.tag_id = t.id
+        JOIN cards c ON c.id = ct.card_id
+        WHERE c.deck_id = ? AND c.deleted_at IS NULL
+        ORDER BY t.name
+        """,
+        (deck_id,),
+    )
+    deck_tags = [row[0] for row in cursor.fetchall()]
     mastered = sum(1 for card in cards if card["mastery_status"] == "mastered")
     total = len(cards)
     percent_mastered = mastery_percent(mastered, total)
@@ -67,6 +143,7 @@ async def deck_detail(deck_id: int, request: Request, kid_id: Optional[int] = No
             "mastered_count": mastered,
             "total_cards": total,
             "kid_id": kid_id,
+            "deck_tags": deck_tags,
         },
     )
 

@@ -3,6 +3,13 @@
     {% if card.text_id and card.chunk_index and card.text_total %}
         <p class="text-sm text-gray-600 mb-2">Part {{ card.chunk_index }} of {{ card.text_total }}{% if card.text_title %} • {{ card.text_title }}{% endif %}</p>
     {% endif %}
+    {% if card.tags %}
+        <div class="flex flex-wrap gap-2 mb-4">
+            {% for tag in card.tags %}
+                <span class="text-xs font-semibold uppercase tracking-wide px-2 py-1 rounded bg-slate-100 text-slate-700">{{ tag }}</span>
+            {% endfor %}
+        </div>
+    {% endif %}
     <form hx-post="/review/submit?kid_id={{ kid_id }}&deck_id={{ deck_id }}&card_id={{ card.id }}{% if group_texts %}&group_texts=1{% endif %}" hx-target="#result" hx-swap="beforeend" class="space-y-4">
         {% if group_texts %}
             <input type="hidden" name="group_texts" value="1">

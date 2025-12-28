@@ -22,14 +22,29 @@ def get_next_card_position(cursor, deck_id: int) -> int:
 def get_cards_for_deck(cursor, deck_id: int) -> List[dict]:
     cursor.execute(
         """
-        SELECT id, prompt, mastery_status, streak, due_date, position
-        FROM cards
-        WHERE deck_id = ? AND deleted_at IS NULL
-        ORDER BY position, id
+        SELECT
+            c.id,
+            c.prompt,
+            c.mastery_status,
+            c.streak,
+            c.due_date,
+            c.position,
+            GROUP_CONCAT(t.name, ',') AS tags
+        FROM cards c
+        LEFT JOIN card_tags ct ON ct.card_id = c.id
+        LEFT JOIN tags t ON t.id = ct.tag_id
+        WHERE c.deck_id = ? AND c.deleted_at IS NULL
+        GROUP BY c.id
+        ORDER BY c.position, c.id
         """,
         (deck_id,),
     )
-    return [dict(row) for row in cursor.fetchall()]
+    cards = []
+    for row in cursor.fetchall():
+        card = dict(row)
+        card["tags"] = [tag for tag in (card.get("tags") or "").split(",") if tag]
+        cards.append(card)
+    return cards
 
 def get_card_position_flags(cursor, deck_id: int, position: int) -> dict:
     cursor.execute(
@@ -160,9 +175,19 @@ async def card_row(deck_id: int, card_id: int, request: Request, conn = Depends(
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT id, prompt, mastery_status, streak, due_date, position
-        FROM cards
-        WHERE id = ? AND deck_id = ? AND deleted_at IS NULL
+        SELECT
+            c.id,
+            c.prompt,
+            c.mastery_status,
+            c.streak,
+            c.due_date,
+            c.position,
+            GROUP_CONCAT(t.name, ',') AS tags
+        FROM cards c
+        LEFT JOIN card_tags ct ON ct.card_id = c.id
+        LEFT JOIN tags t ON t.id = ct.tag_id
+        WHERE c.id = ? AND c.deck_id = ? AND c.deleted_at IS NULL
+        GROUP BY c.id
         """,
         (card_id, deck_id),
     )
@@ -172,7 +197,12 @@ async def card_row(deck_id: int, card_id: int, request: Request, conn = Depends(
     flags = get_card_position_flags(cursor, deck_id, card["position"])
     return templates.TemplateResponse(
         "cards/card_row.html",
-        {"request": request, "card": dict(card), "deck_id": deck_id, **flags},
+        {
+            "request": request,
+            "card": {**dict(card), "tags": [tag for tag in (card["tags"] or "").split(",") if tag]},
+            "deck_id": deck_id,
+            **flags,
+        },
     )
 
 @router.get("/{deck_id}/cards/{card_id}/edit", response_class=HTMLResponse)
@@ -207,9 +237,19 @@ async def edit_card(deck_id: int, card_id: int, request: Request, prompt: str = 
     conn.commit()
     cursor.execute(
         """
-        SELECT id, prompt, mastery_status, streak, due_date, position
-        FROM cards
-        WHERE id = ? AND deck_id = ? AND deleted_at IS NULL
+        SELECT
+            c.id,
+            c.prompt,
+            c.mastery_status,
+            c.streak,
+            c.due_date,
+            c.position,
+            GROUP_CONCAT(t.name, ',') AS tags
+        FROM cards c
+        LEFT JOIN card_tags ct ON ct.card_id = c.id
+        LEFT JOIN tags t ON t.id = ct.tag_id
+        WHERE c.id = ? AND c.deck_id = ? AND c.deleted_at IS NULL
+        GROUP BY c.id
         """,
         (card_id, deck_id),
     )
@@ -217,7 +257,12 @@ async def edit_card(deck_id: int, card_id: int, request: Request, prompt: str = 
     flags = get_card_position_flags(cursor, deck_id, card["position"])
     return templates.TemplateResponse(
         "cards/card_row.html",
-        {"request": request, "card": dict(card), "deck_id": deck_id, **flags},
+        {
+            "request": request,
+            "card": {**dict(card), "tags": [tag for tag in (card["tags"] or "").split(",") if tag]},
+            "deck_id": deck_id,
+            **flags,
+        },
     )
 
 @router.post("/{deck_id}/cards/{card_id}/delete", response_class=HTMLResponse)

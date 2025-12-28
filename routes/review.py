@@ -26,7 +26,13 @@ def get_next_card_for_review(kid_id: int, deck_id: int, conn, group_texts: bool 
                 t.title AS text_title,
                 (
                     SELECT COUNT(*) FROM cards c2 WHERE c2.text_id = c.text_id
-                ) AS text_total
+                ) AS text_total,
+                (
+                    SELECT GROUP_CONCAT(t2.name, ',')
+                    FROM card_tags ct2
+                    JOIN tags t2 ON t2.id = ct2.tag_id
+                    WHERE ct2.card_id = c.id
+                ) AS tags
             FROM cards c
             LEFT JOIN texts t ON t.id = c.text_id
             WHERE c.deck_id = ? AND c.due_date <= date('now') AND c.deleted_at IS NULL
@@ -47,7 +53,13 @@ def get_next_card_for_review(kid_id: int, deck_id: int, conn, group_texts: bool 
                 t.title AS text_title,
                 (
                     SELECT COUNT(*) FROM cards c2 WHERE c2.text_id = c.text_id
-                ) AS text_total
+                ) AS text_total,
+                (
+                    SELECT GROUP_CONCAT(t2.name, ',')
+                    FROM card_tags ct2
+                    JOIN tags t2 ON t2.id = ct2.tag_id
+                    WHERE ct2.card_id = c.id
+                ) AS tags
             FROM cards c
             LEFT JOIN texts t ON t.id = c.text_id
             WHERE c.deck_id = ? AND c.due_date <= date('now') AND c.deleted_at IS NULL
@@ -62,7 +74,9 @@ def get_next_card_for_review(kid_id: int, deck_id: int, conn, group_texts: bool 
         )
     row = cursor.fetchone()
     if row:
-        return dict(row)
+        card = dict(row)
+        card["tags"] = [tag for tag in (card.get("tags") or "").split(",") if tag]
+        return card
     return None
 
 @router.get("/{kid_id}/{deck_id}", response_class=HTMLResponse)
@@ -79,6 +93,18 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
     if not deck_row:
         raise HTTPException(status_code=404, detail="Deck not found")
     deck = {"id": deck_row[0], "name": deck_row[1]}
+    cursor.execute(
+        """
+        SELECT DISTINCT t.name
+        FROM tags t
+        JOIN card_tags ct ON ct.tag_id = t.id
+        JOIN cards c ON c.id = ct.card_id
+        WHERE c.deck_id = ? AND c.deleted_at IS NULL
+        ORDER BY t.name
+        """,
+        (deck_id,),
+    )
+    deck_tags = [row[0] for row in cursor.fetchall()]
     hint_mode = normalize_hint_mode(request.query_params.get("hint_mode"))
     group_texts = request.query_params.get("group_texts") == "1"
     card = get_next_card_for_review(kid_id, deck_id, conn, group_texts=group_texts)
@@ -96,6 +122,7 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
             "hint_text": hint_text,
             "hint_modes": HINT_MODE_OPTIONS,
             "group_texts": group_texts,
+            "deck_tags": deck_tags,
         },
     )
 
