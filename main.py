@@ -15,7 +15,7 @@ sys.path.insert(0, str(base_dir))
 
 from db.database import init_db, get_db
 from config import load_config, CONFIG_DIR
-from routes import kids, decks, cards, review, stats, plan, backups  # Import routers
+from routes import kids, decks, cards, review, stats, plan, backups, trash  # Import routers
 
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 app = FastAPI(title="MemCoach", description="Local-first memorization app for kids")
@@ -30,6 +30,7 @@ app.include_router(review.router, prefix="/review", tags=["review"])
 app.include_router(stats.router, prefix="/stats", tags=["stats"])
 app.include_router(plan.router, prefix="/plan", tags=["plan"])
 app.include_router(backups.router, prefix="/admin", tags=["admin"])
+app.include_router(trash.router, prefix="/trash", tags=["trash"])
 
 # Dependency for DB connection
 def get_db_conn():
@@ -39,8 +40,8 @@ def get_db_conn():
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request, conn = Depends(get_db_conn)):
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name FROM kids ORDER BY name")
-    kids_list = [{"id": row[0], "name": row[1]} for row in cursor.fetchall()]
+    cursor.execute("SELECT id, name FROM kids WHERE deleted_at IS NULL ORDER BY name")
+    kids_list = [dict(row) for row in cursor.fetchall()]
     return templates.TemplateResponse("index.html", {"request": request, "kids": kids_list})
 
 # First-run init

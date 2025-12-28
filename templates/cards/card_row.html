@@ -1,0 +1,57 @@
+<li id="card-{{ card.id }}" class="py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div class="space-y-1">
+        <p class="font-medium text-gray-800">{{ card.prompt }}</p>
+        <p class="text-sm text-gray-500">Streak: {{ card.streak }} | Due: {{ card.due_date }}</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+        <span class="text-xs font-semibold uppercase tracking-wide px-2 py-1 rounded
+            {% if card.mastery_status == 'mastered' %}
+                bg-green-100 text-green-800
+            {% elif card.mastery_status == 'learning' %}
+                bg-yellow-100 text-yellow-800
+            {% else %}
+                bg-gray-100 text-gray-700
+            {% endif %}
+        ">
+            {{ card.mastery_status }}
+        </span>
+        <div class="flex flex-wrap gap-2">
+            <button
+                class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs hover:bg-gray-300 disabled:opacity-50"
+                hx-post="/decks/{{ deck_id }}/cards/{{ card.id }}/move"
+                hx-vals='{"direction": "up"}'
+                hx-target="#card-list"
+                hx-swap="innerHTML"
+                {% if is_first %}disabled{% endif %}
+            >
+                ↑
+            </button>
+            <button
+                class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs hover:bg-gray-300 disabled:opacity-50"
+                hx-post="/decks/{{ deck_id }}/cards/{{ card.id }}/move"
+                hx-vals='{"direction": "down"}'
+                hx-target="#card-list"
+                hx-swap="innerHTML"
+                {% if is_last %}disabled{% endif %}
+            >
+                ↓
+            </button>
+            <button
+                class="bg-yellow-500 text-white px-2 py-1 rounded text-xs hover:bg-yellow-600"
+                hx-get="/decks/{{ deck_id }}/cards/{{ card.id }}/edit"
+                hx-target="#card-{{ card.id }}"
+                hx-swap="outerHTML"
+            >
+                Edit
+            </button>
+            <button
+                class="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600"
+                hx-post="/decks/{{ deck_id }}/cards/{{ card.id }}/delete"
+                hx-target="#card-{{ card.id }}"
+                hx-swap="outerHTML"
+            >
+                Delete
+            </button>
+        </div>
+    </div>
+</li>

@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Trash - MemCoach{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-8">
+    <div class="flex items-center justify-between">
+        <h2 class="text-3xl font-bold text-gray-800">Trash</h2>
+        <a href="/" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Back to Home</a>
+    </div>
+
+    <section class="bg-white p-4 rounded shadow space-y-3">
+        <h3 class="text-xl font-semibold">Kids</h3>
+        {% if kids %}
+            <ul class="divide-y divide-gray-200">
+                {% for kid in kids %}
+                    <li class="py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p class="font-medium text-gray-800">{{ kid.name }}</p>
+                            <p class="text-sm text-gray-500">Deleted {{ kid.deleted_at }}</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <form method="post" action="/trash/kids/{{ kid.id }}/restore">
+                                <button class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">Restore</button>
+                            </form>
+                            <form method="post" action="/trash/kids/{{ kid.id }}/purge">
+                                <button class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">Delete Permanently</button>
+                            </form>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="text-gray-600">No deleted kids.</p>
+        {% endif %}
+    </section>
+
+    <section class="bg-white p-4 rounded shadow space-y-3">
+        <h3 class="text-xl font-semibold">Decks</h3>
+        {% if decks %}
+            <ul class="divide-y divide-gray-200">
+                {% for deck in decks %}
+                    <li class="py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p class="font-medium text-gray-800">{{ deck.name }}</p>
+                            <p class="text-sm text-gray-500">Deleted {{ deck.deleted_at }}</p>
+                            <p class="text-sm text-gray-500">Cards: {{ deck.card_count }}</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <form method="post" action="/trash/decks/{{ deck.id }}/restore">
+                                <button class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">Restore</button>
+                            </form>
+                            <form method="post" action="/trash/decks/{{ deck.id }}/purge">
+                                <button class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">Delete Permanently</button>
+                            </form>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="text-gray-600">No deleted decks.</p>
+        {% endif %}
+    </section>
+
+    <section class="bg-white p-4 rounded shadow space-y-3">
+        <h3 class="text-xl font-semibold">Cards</h3>
+        {% if cards %}
+            <ul class="divide-y divide-gray-200">
+                {% for card in cards %}
+                    <li class="py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p class="font-medium text-gray-800">{{ card.prompt }}</p>
+                            <p class="text-sm text-gray-500">Deck: {{ card.deck_name }}</p>
+                            <p class="text-sm text-gray-500">Deleted {{ card.deleted_at }}</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <form method="post" action="/trash/cards/{{ card.id }}/restore">
+                                <button class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">Restore</button>
+                            </form>
+                            <form method="post" action="/trash/cards/{{ card.id }}/purge">
+                                <button class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">Delete Permanently</button>
+                            </form>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="text-gray-600">No deleted cards.</p>
+        {% endif %}
+    </section>
+
+    <section class="bg-white p-4 rounded shadow space-y-3">
+        <h3 class="text-xl font-semibold">Texts</h3>
+        {% if texts %}
+            <ul class="divide-y divide-gray-200">
+                {% for text in texts %}
+                    <li class="py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p class="font-medium text-gray-800">{{ text.title }}</p>
+                            <p class="text-sm text-gray-500">Deck: {{ text.deck_name }}</p>
+                            <p class="text-sm text-gray-500">Deleted {{ text.deleted_at }}</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <form method="post" action="/trash/texts/{{ text.id }}/restore">
+                                <button class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">Restore</button>
+                            </form>
+                            <form method="post" action="/trash/texts/{{ text.id }}/purge">
+                                <button class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">Delete Permanently</button>
+                            </form>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="text-gray-600">No deleted texts.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

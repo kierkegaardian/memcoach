@@ -29,7 +29,8 @@ def get_next_card_for_review(kid_id: int, deck_id: int, conn, group_texts: bool 
                 ) AS text_total
             FROM cards c
             LEFT JOIN texts t ON t.id = c.text_id
-            WHERE c.deck_id = ? AND c.due_date <= date('now')
+            WHERE c.deck_id = ? AND c.due_date <= date('now') AND c.deleted_at IS NULL
+            AND (c.text_id IS NULL OR t.deleted_at IS NULL)
             AND NOT EXISTS (
                 SELECT 1 FROM reviews r WHERE r.card_id = c.id AND r.kid_id = ? AND date(r.ts) = date('now')
             )
@@ -49,7 +50,8 @@ def get_next_card_for_review(kid_id: int, deck_id: int, conn, group_texts: bool 
                 ) AS text_total
             FROM cards c
             LEFT JOIN texts t ON t.id = c.text_id
-            WHERE c.deck_id = ? AND c.due_date <= date('now')
+            WHERE c.deck_id = ? AND c.due_date <= date('now') AND c.deleted_at IS NULL
+            AND (c.text_id IS NULL OR t.deleted_at IS NULL)
             AND NOT EXISTS (
                 SELECT 1 FROM reviews r WHERE r.card_id = c.id AND r.kid_id = ? AND date(r.ts) = date('now')
             )
@@ -67,12 +69,12 @@ def get_next_card_for_review(kid_id: int, deck_id: int, conn, group_texts: bool 
 async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depends(get_db)):
     """Start review session for kid and deck."""
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name FROM kids WHERE id = ?", (kid_id,))
+    cursor.execute("SELECT id, name FROM kids WHERE id = ? AND deleted_at IS NULL", (kid_id,))
     kid_row = cursor.fetchone()
     if not kid_row:
         raise HTTPException(status_code=404, detail="Kid not found")
     kid = {"id": kid_row[0], "name": kid_row[1]}
-    cursor.execute("SELECT id, name FROM decks WHERE id = ?", (deck_id,))
+    cursor.execute("SELECT id, name FROM decks WHERE id = ? AND deleted_at IS NULL", (deck_id,))
     deck_row = cursor.fetchone()
     if not deck_row:
         raise HTTPException(status_code=404, detail="Deck not found")
@@ -128,7 +130,7 @@ async def next_card(kid_id: int, deck_id: int, request: Request, conn = Depends(
 async def hint_text(card_id: int, hint_mode: str = "none", conn = Depends(get_db)):
     """HTMX endpoint for hint text updates."""
     cursor = conn.cursor()
-    cursor.execute("SELECT full_text FROM cards WHERE id = ?", (card_id,))
+    cursor.execute("SELECT full_text FROM cards WHERE id = ? AND deleted_at IS NULL", (card_id,))
     card_row = cursor.fetchone()
     if not card_row:
         raise HTTPException(status_code=404, detail="Card not found")
@@ -151,7 +153,7 @@ async def submit_review(
     """HTMX endpoint to grade recall, update card/review, return result partial."""
     config = load_config()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM cards WHERE id = ?", (card_id,))
+    cursor.execute("SELECT * FROM cards WHERE id = ? AND deleted_at IS NULL", (card_id,))
     card_row = cursor.fetchone()
     if not card_row:
         raise HTTPException(status_code=404, detail="Card not found")

@@ -10,15 +10,9 @@
         <a href="/plan" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg inline-block transition">View Plan</a>
     </div>
     {% if decks %}
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
+        <div class="max-w-4xl mx-auto bg-white rounded-lg shadow divide-y divide-gray-200">
             {% for deck in decks %}
-                <div class="bg-white p-4 rounded-lg shadow">
-                    <h3 class="text-xl font-semibold mb-2">{{ deck.name }}</h3>
-                    <div class="space-x-2">
-                        <a href="/decks/{{ deck.id }}/add" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">Add Cards</a>
-                        <a href="/decks/{{ deck.id }}" class="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600">View Progress</a>
-                    </div>
-                </div>
+                {% include "decks/deck_row.html" %}
             {% endfor %}
         </div>
     {% else %}

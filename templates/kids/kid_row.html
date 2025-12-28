@@ -1,0 +1,24 @@
+<li id="kid-{{ kid.id }}" class="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+        <p class="text-lg font-semibold text-gray-800">{{ kid.name }}</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+        <a href="/kids/{{ kid.id }}/decks" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">View Decks</a>
+        <button
+            class="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600"
+            hx-get="/kids/{{ kid.id }}/edit"
+            hx-target="#kid-{{ kid.id }}"
+            hx-swap="outerHTML"
+        >
+            Edit
+        </button>
+        <button
+            class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600"
+            hx-post="/kids/{{ kid.id }}/delete"
+            hx-target="#kid-{{ kid.id }}"
+            hx-swap="outerHTML"
+        >
+            Delete
+        </button>
+    </div>
+</li>

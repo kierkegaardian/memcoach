@@ -22,6 +22,8 @@ def init_db():
         conn.executescript(INDEXES_SQL)
         ensure_card_mastery_status(conn)
         ensure_card_chunk_fields(conn)
+        ensure_soft_delete_columns(conn)
+        ensure_card_position(conn)
         ensure_schema_version(conn)
         conn.commit()
     run_daily_backup()
@@ -45,6 +47,24 @@ def ensure_card_chunk_fields(conn: sqlite3.Connection) -> None:
         cursor.execute("ALTER TABLE cards ADD COLUMN text_id INTEGER")
     if "chunk_index" not in columns:
         cursor.execute("ALTER TABLE cards ADD COLUMN chunk_index INTEGER")
+
+def ensure_soft_delete_columns(conn: sqlite3.Connection) -> None:
+    """Ensure tables have deleted_at columns for soft deletes."""
+    cursor = conn.cursor()
+    for table in ("kids", "decks", "cards", "texts"):
+        cursor.execute(f"PRAGMA table_info({table})")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "deleted_at" not in columns:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN deleted_at TEXT")
+
+def ensure_card_position(conn: sqlite3.Connection) -> None:
+    """Ensure cards table has position column and initialize existing rows."""
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(cards)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if "position" not in columns:
+        cursor.execute("ALTER TABLE cards ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
+    cursor.execute("UPDATE cards SET position = id WHERE position IS NULL OR position = 0")
 
 def get_schema_version(conn: sqlite3.Connection) -> int:
     """Read the SQLite schema version from PRAGMA user_version."""

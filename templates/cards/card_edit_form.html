@@ -1,0 +1,39 @@
+<li id="card-{{ card.id }}" class="py-3">
+    <form
+        class="space-y-3"
+        hx-post="/decks/{{ deck_id }}/cards/{{ card.id }}/edit"
+        hx-target="#card-{{ card.id }}"
+        hx-swap="outerHTML"
+    >
+        <div>
+            <label for="card-prompt-{{ card.id }}" class="block text-sm font-medium text-gray-700">Prompt</label>
+            <input
+                id="card-prompt-{{ card.id }}"
+                name="prompt"
+                type="text"
+                value="{{ card.prompt }}"
+                class="w-full px-3 py-2 border border-gray-300 rounded"
+            >
+        </div>
+        <div>
+            <label for="card-text-{{ card.id }}" class="block text-sm font-medium text-gray-700">Full Text</label>
+            <textarea
+                id="card-text-{{ card.id }}"
+                name="full_text"
+                class="w-full px-3 py-2 border border-gray-300 rounded h-24"
+            >{{ card.full_text }}</textarea>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <button type="submit" class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">Save</button>
+            <button
+                type="button"
+                class="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600"
+                hx-get="/decks/{{ deck_id }}/cards/{{ card.id }}/row"
+                hx-target="#card-{{ card.id }}"
+                hx-swap="outerHTML"
+            >
+                Cancel
+            </button>
+        </div>
+    </form>
+</li>

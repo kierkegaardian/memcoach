@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Kids - MemCoach{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+    <div class="flex items-center justify-between">
+        <h2 class="text-3xl font-bold text-gray-800">Kids</h2>
+        <a href="/kids/new" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">+ New Kid</a>
+    </div>
+    {% if kids %}
+        <ul class="divide-y divide-gray-200 bg-white rounded shadow">
+            {% for kid in kids %}
+                {% include "kids/kid_row.html" %}
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="text-gray-600">No kids yet. Add one to get started.</p>
+    {% endif %}
+    <a href="/" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 inline-block">Back to Home</a>
+</div>
+{% endblock %}
