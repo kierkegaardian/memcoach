@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from db.database import get_db
+from utils.mastery import mastery_percent
 
 router = APIRouter()
 base_dir = Path(__file__).resolve().parent.parent
@@ -35,6 +36,29 @@ async def kid_stats(kid_id: int, request: Request, conn = Depends(get_db)):
     deck_stats = [{"deck": row[0], "reviews": row[1]} for row in cursor.fetchall()]
     cursor.execute("SELECT MAX(streak) FROM cards c JOIN reviews r ON c.id = r.card_id WHERE r.kid_id = ?", (kid_id,))
     max_streak = cursor.fetchone()[0] or 0
+    cursor.execute("""
+        SELECT d.id, d.name,
+            SUM(CASE WHEN c.mastery_status = 'mastered' THEN 1 ELSE 0 END) AS mastered,
+            SUM(CASE WHEN c.mastery_status = 'learning' THEN 1 ELSE 0 END) AS learning,
+            SUM(CASE WHEN c.mastery_status = 'new' THEN 1 ELSE 0 END) AS new_count,
+            COUNT(c.id) AS total
+        FROM decks d
+        LEFT JOIN cards c ON c.deck_id = d.id
+        GROUP BY d.id, d.name
+        ORDER BY d.name
+    """)
+    deck_mastery = []
+    for row in cursor.fetchall():
+        total = row["total"] or 0
+        mastered = row["mastered"] or 0
+        deck_mastery.append({
+            "deck": row["name"],
+            "mastered": mastered,
+            "learning": row["learning"] or 0,
+            "new": row["new_count"] or 0,
+            "total": total,
+            "percent_mastered": mastery_percent(mastered, total),
+        })
     return templates.TemplateResponse("stats.html", {
         "request": request, 
         "kid_name": kid_name, 
@@ -42,5 +66,6 @@ async def kid_stats(kid_id: int, request: Request, conn = Depends(get_db)):
         "success_rate": round(success_rate, 1), 
         "grades": grades, 
         "deck_stats": deck_stats, 
-        "max_streak": max_streak
+        "max_streak": max_streak,
+        "deck_mastery": deck_mastery,
     })

@@ -46,14 +46,14 @@ async def add_cards(
                 p = f"{prompt_base}{i}: " if len(blocks) > 1 else prompt_base
                 f_text = block
                 cursor.execute("""
-                    INSERT INTO cards (deck_id, prompt, full_text, interval_days, due_date, ease_factor, streak)
-                    VALUES (?, ?, ?, 1, date('now'), 2.5, 0)
+                    INSERT INTO cards (deck_id, prompt, full_text, interval_days, due_date, ease_factor, streak, mastery_status)
+                    VALUES (?, ?, ?, 1, date('now'), 2.5, 0, 'new')
                 """, (deck_id, p, f_text))
                 added += 1
         elif prompt and full_text:
             cursor.execute("""
-                INSERT INTO cards (deck_id, prompt, full_text, interval_days, due_date, ease_factor, streak)
-                VALUES (?, ?, ?, 1, date('now'), 2.5, 0)
+                INSERT INTO cards (deck_id, prompt, full_text, interval_days, due_date, ease_factor, streak, mastery_status)
+                VALUES (?, ?, ?, 1, date('now'), 2.5, 0, 'new')
             """, (deck_id, prompt, full_text))
             added = 1
         else:

@@ -5,6 +5,8 @@ from pathlib import Path
 from db.database import get_db
 from models.deck import DeckCreate
 import sqlite3
+from utils.mastery import mastery_percent
+from typing import Optional
 
 router = APIRouter()
 base_dir = Path(__file__).resolve().parent.parent
@@ -36,3 +38,34 @@ async def list_decks(request: Request, conn = Depends(get_db)):
     cursor.execute("SELECT id, name FROM decks ORDER BY name")
     decks = [{"id": row[0], "name": row[1]} for row in cursor.fetchall()]
     return templates.TemplateResponse("decks/index.html", {"request": request, "decks": decks})
+
+@router.get("/{deck_id}", response_class=HTMLResponse)
+async def deck_detail(deck_id: int, request: Request, kid_id: Optional[int] = None, conn = Depends(get_db)):
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM decks WHERE id = ?", (deck_id,))
+    deck_row = cursor.fetchone()
+    if not deck_row:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    deck = {"id": deck_row[0], "name": deck_row[1]}
+    cursor.execute("""
+        SELECT id, prompt, mastery_status, streak, due_date
+        FROM cards
+        WHERE deck_id = ?
+        ORDER BY id
+    """, (deck_id,))
+    cards = [dict(row) for row in cursor.fetchall()]
+    mastered = sum(1 for card in cards if card["mastery_status"] == "mastered")
+    total = len(cards)
+    percent_mastered = mastery_percent(mastered, total)
+    return templates.TemplateResponse(
+        "decks/detail.html",
+        {
+            "request": request,
+            "deck": deck,
+            "cards": cards,
+            "percent_mastered": percent_mastered,
+            "mastered_count": mastered,
+            "total_cards": total,
+            "kid_id": kid_id,
+        },
+    )

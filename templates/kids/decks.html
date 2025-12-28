@@ -14,6 +14,7 @@
                     <div class="space-x-3">
                         <a href="/decks/{{ deck.id }}/add?kid_id={{ kid.id }}" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">Add Cards</a>
                         <a href="/review/{{ kid.id }}/{{ deck.id }}" class="bg-purple-500 text-white px-4 py-2 rounded text-sm hover:bg-purple-600">Start Review</a>
+                        <a href="/decks/{{ deck.id }}?kid_id={{ kid.id }}" class="bg-gray-500 text-white px-4 py-2 rounded text-sm hover:bg-gray-600">Progress</a>
                     </div>
                 </div>
             {% endfor %}

@@ -5,6 +5,7 @@ from pathlib import Path
 from db.database import get_db
 from utils.grading import grade_recall
 from utils.sm2 import update_sm2, map_grade_to_quality
+from utils.mastery import mastery_status_from_streak
 from config import load_config
 import sqlite3
 from typing import Optional, Dict
@@ -82,9 +83,12 @@ async def submit_review(
     new_interval, new_ef, new_streak, new_due = update_sm2(
         card['interval_days'], card['ease_factor'], quality, card['streak']
     )
+    mastery_status = mastery_status_from_streak(new_streak)
     cursor.execute("""
-        UPDATE cards SET interval_days = ?, ease_factor = ?, streak = ?, due_date = ? WHERE id = ?
-    """, (new_interval, new_ef, new_streak, new_due.isoformat(), card_id))
+        UPDATE cards
+        SET interval_days = ?, ease_factor = ?, streak = ?, due_date = ?, mastery_status = ?
+        WHERE id = ?
+    """, (new_interval, new_ef, new_streak, new_due.isoformat(), mastery_status, card_id))
     cursor.execute("""
         INSERT INTO reviews (card_id, kid_id, grade, user_text) VALUES (?, ?, ?, ?)
     """, (card_id, kid_id, grade, user_text))

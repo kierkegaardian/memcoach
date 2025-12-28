@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS cards (
     due_date TEXT NOT NULL DEFAULT (date('now')),
     ease_factor REAL NOT NULL DEFAULT 2.5,
     streak INTEGER NOT NULL DEFAULT 0,
+    mastery_status TEXT NOT NULL DEFAULT 'new' CHECK(mastery_status IN ('new', 'learning', 'mastered')),
     FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE
 );
 
