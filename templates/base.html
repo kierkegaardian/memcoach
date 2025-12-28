@@ -18,20 +18,24 @@
             </div>
             <div class="flex flex-wrap items-center gap-3">
                 <a href="/kid-mode" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-4 py-2 rounded-md">Kid Mode</a>
-                {% if request.state.parent_unlocked %}
-                    <a href="/admin/backup/manage" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-4 py-2 rounded-md">Parent Admin</a>
-                    <a href="/trash" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-4 py-2 rounded-md">Trash</a>
-                    <form method="post" action="/parent/lock" class="inline">
-                        <input type="hidden" name="next_path" value="{{ request.url.path }}">
-                        <button type="submit" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-4 py-2 rounded-md">Lock Parent Mode</button>
-                    </form>
+                {% if request.state.parent_pin_configured %}
+                    {% if request.state.parent_unlocked %}
+                        <a href="/admin/backup/manage" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-4 py-2 rounded-md">Parent Admin</a>
+                        <a href="/trash" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-4 py-2 rounded-md">Trash</a>
+                        <form method="post" action="/parent/lock" class="inline">
+                            <input type="hidden" name="next_path" value="{{ request.url.path }}">
+                            <button type="submit" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-4 py-2 rounded-md">Lock Parent Mode</button>
+                        </form>
+                    {% else %}
+                        <form method="post" action="/parent/unlock" class="flex flex-wrap gap-2 items-center bg-blue-500/20 px-3 py-2 rounded-md">
+                            <input type="hidden" name="next_path" value="{{ request.url.path }}">
+                            <label for="parent-pin" class="sr-only">Parent PIN</label>
+                            <input id="parent-pin" name="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Parent PIN" class="rounded px-3 py-1 text-gray-900 text-sm" required>
+                            <button type="submit" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-3 py-1 rounded-md">Unlock</button>
+                        </form>
+                    {% endif %}
                 {% else %}
-                    <form method="post" action="/parent/unlock" class="flex flex-wrap gap-2 items-center bg-blue-500/20 px-3 py-2 rounded-md">
-                        <input type="hidden" name="next_path" value="{{ request.url.path }}">
-                        <label for="parent-pin" class="sr-only">Parent PIN</label>
-                        <input id="parent-pin" name="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Parent PIN" class="rounded px-3 py-1 text-gray-900 text-sm" required>
-                        <button type="submit" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-3 py-1 rounded-md">Unlock</button>
-                    </form>
+                    <a href="/parent/setup" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-4 py-2 rounded-md">Set Parent PIN</a>
                 {% endif %}
             </div>
         </div>
