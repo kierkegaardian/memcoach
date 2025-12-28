@@ -1,6 +1,6 @@
 # SQL schema for MemCoach database
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA_SQL = """
 -- Kids
@@ -126,6 +126,9 @@ CREATE TABLE IF NOT EXISTS reviews (
     kid_id INTEGER NOT NULL,
     ts TEXT NOT NULL DEFAULT (datetime('now')),
     grade TEXT NOT NULL CHECK(grade IN ('perfect', 'good', 'fail')),
+    auto_grade TEXT CHECK(auto_grade IN ('perfect', 'good', 'fail')),
+    final_grade TEXT CHECK(final_grade IN ('perfect', 'good', 'fail')),
+    graded_by TEXT NOT NULL DEFAULT 'auto' CHECK(graded_by IN ('auto', 'parent')),
     review_mode TEXT NOT NULL DEFAULT 'free_recall' CHECK(review_mode IN ('free_recall', 'recitation', 'cloze', 'first_letters')),
     hint_mode TEXT NOT NULL DEFAULT 'none',
     user_text TEXT,

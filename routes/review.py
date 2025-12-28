@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from db.database import get_db
-from utils.grading import grade_recall
+from utils.grading import grade_recall, token_diff
 from utils.hints import (
     build_hint_text,
     build_cloze_text,
@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 router = APIRouter()
 base_dir = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
+templates.env.globals["token_diff"] = token_diff
 
 def get_deck_review_mode(conn, deck_id: int) -> str:
     cursor = conn.cursor()
@@ -240,9 +241,14 @@ async def submit_review(
         else:
             grade = "fail"
         user_text = user_text or ""
+        auto_grade = None
+        final_grade = grade
+        graded_by = "parent"
     else:
-        grade = grade_recall(full_text, user_text, config)
-        quality = map_grade_to_quality(grade)
+        auto_grade = grade_recall(full_text, user_text, config)
+        final_grade = auto_grade
+        graded_by = "auto"
+        quality = map_grade_to_quality(final_grade)
     new_interval, new_ef, new_streak, new_due = update_sm2(
         card['interval_days'], card['ease_factor'], quality, card['streak']
     )
@@ -262,9 +268,32 @@ async def submit_review(
         except ValueError:
             duration_seconds = None
     cursor.execute("""
-        INSERT INTO reviews (card_id, kid_id, grade, review_mode, user_text, hint_mode, duration_seconds)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (card_id, kid_id, grade, review_mode, user_text, hint_mode, duration_seconds))
+        INSERT INTO reviews (
+            card_id,
+            kid_id,
+            grade,
+            auto_grade,
+            final_grade,
+            graded_by,
+            review_mode,
+            user_text,
+            hint_mode,
+            duration_seconds
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        card_id,
+        kid_id,
+        final_grade,
+        auto_grade,
+        final_grade,
+        graded_by,
+        review_mode,
+        user_text,
+        hint_mode,
+        duration_seconds,
+    ))
+    review_id = cursor.lastrowid
     conn.commit()
     color_class = {
         'perfect': 'bg-green-100 border-green-400 text-green-800',
@@ -275,13 +304,75 @@ async def submit_review(
         "partials/review_result.html",
         {
             "request": request,
-            "grade": grade,
-            "color_class": color_class.get(grade, "bg-gray-100"),
+            "grade": final_grade,
+            "auto_grade": auto_grade,
+            "final_grade": final_grade,
+            "graded_by": graded_by,
+            "color_class": color_class.get(final_grade, "bg-gray-100"),
             "user_text": user_text,
             "full_text": full_text,
             "kid_id": kid_id,
             "deck_id": deck_id,
             "hint_mode": hint_mode,
             "group_texts": group_texts == "1",
+            "review_id": review_id,
+        },
+    )
+
+@router.post("/override", response_class=HTMLResponse)
+async def override_review_grade(
+    request: Request,
+    review_id: int = Form(...),
+    grade: str = Form(...),
+    group_texts: str = Form("0"),
+    conn = Depends(get_db),
+):
+    """HTMX endpoint to override auto-grade with parent input."""
+    if grade not in {"perfect", "good", "fail"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid grade")
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE reviews
+        SET final_grade = ?, grade = ?, graded_by = 'parent'
+        WHERE id = ?
+        """,
+        (grade, grade, review_id),
+    )
+    cursor.execute(
+        """
+        SELECT r.user_text, r.hint_mode, r.kid_id, r.auto_grade, r.final_grade, r.graded_by,
+               c.full_text, c.deck_id
+        FROM reviews r
+        JOIN cards c ON c.id = r.card_id
+        WHERE r.id = ?
+        """,
+        (review_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Review not found")
+    conn.commit()
+    color_class = {
+        "perfect": "bg-green-100 border-green-400 text-green-800",
+        "good": "bg-yellow-100 border-yellow-400 text-yellow-800",
+        "fail": "bg-red-100 border-red-400 text-red-800",
+    }
+    return templates.TemplateResponse(
+        "partials/review_result.html",
+        {
+            "request": request,
+            "grade": row["final_grade"],
+            "auto_grade": row["auto_grade"],
+            "final_grade": row["final_grade"],
+            "graded_by": row["graded_by"],
+            "color_class": color_class.get(row["final_grade"], "bg-gray-100"),
+            "user_text": row["user_text"] or "",
+            "full_text": row["full_text"],
+            "kid_id": row["kid_id"],
+            "deck_id": row["deck_id"],
+            "hint_mode": row["hint_mode"],
+            "group_texts": group_texts == "1",
+            "review_id": review_id,
         },
     )

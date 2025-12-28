@@ -308,10 +308,20 @@ async def submit_today_review(
             duration_seconds = None
     cursor.execute(
         """
-        INSERT INTO reviews (card_id, kid_id, grade, user_text, hint_mode, duration_seconds)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO reviews (
+            card_id,
+            kid_id,
+            grade,
+            auto_grade,
+            final_grade,
+            graded_by,
+            user_text,
+            hint_mode,
+            duration_seconds
+        )
+        VALUES (?, ?, ?, ?, ?, 'auto', ?, ?, ?)
         """,
-        (card_id, kid_id, grade, user_text, hint_mode, duration_seconds),
+        (card_id, kid_id, grade, grade, grade, user_text, hint_mode, duration_seconds),
     )
     conn.commit()
     color_class = {
