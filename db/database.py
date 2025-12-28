@@ -30,6 +30,7 @@ def init_db():
         ensure_review_review_mode(conn)
         ensure_review_grading_fields(conn)
         ensure_assignment_defaults(conn)
+        ensure_deck_mastery_rules(conn)
         ensure_schema_version(conn)
         conn.commit()
     run_daily_backup()
@@ -135,6 +136,31 @@ def ensure_assignment_defaults(conn: sqlite3.Connection) -> None:
         FROM kids k
         CROSS JOIN decks d
         WHERE k.deleted_at IS NULL AND d.deleted_at IS NULL
+        """
+    )
+
+def ensure_deck_mastery_rules(conn: sqlite3.Connection) -> None:
+    """Ensure deck mastery rules table exists and defaults are seeded."""
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='deck_mastery_rules'"
+    )
+    if not cursor.fetchone():
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS deck_mastery_rules (
+                deck_id INTEGER PRIMARY KEY,
+                consecutive_grades INTEGER NOT NULL DEFAULT 3,
+                min_ease_factor REAL NOT NULL DEFAULT 2.5,
+                min_interval_days INTEGER NOT NULL DEFAULT 7,
+                FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE
+            )
+            """
+        )
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO deck_mastery_rules (deck_id)
+        SELECT id FROM decks WHERE deleted_at IS NULL
         """
     )
 

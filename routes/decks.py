@@ -32,6 +32,10 @@ async def create_deck(name: str = Form(..., description="Deck name"), conn = Dep
             "INSERT OR IGNORE INTO assignments (kid_id, deck_id) SELECT id, ? FROM kids WHERE deleted_at IS NULL",
             (deck_id,),
         )
+        cursor.execute(
+            "INSERT OR IGNORE INTO deck_mastery_rules (deck_id) VALUES (?)",
+            (deck_id,),
+        )
         conn.commit()
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     except sqlite3.IntegrityError:

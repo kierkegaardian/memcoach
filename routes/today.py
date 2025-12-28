@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from db.database import get_db
 from utils.grading import grade_recall
 from utils.hints import HINT_MODE_OPTIONS, build_hint_text, normalize_hint_mode
-from utils.mastery import mastery_status_from_streak
+from utils.mastery import mastery_status_from_rules, get_deck_mastery_rules
 from utils.sm2 import map_grade_to_quality, update_sm2
 from config import load_config
 
@@ -288,7 +288,13 @@ async def submit_today_review(
     new_interval, new_ef, new_streak, new_due = update_sm2(
         card["interval_days"], card["ease_factor"], quality, card["streak"]
     )
-    mastery_status = mastery_status_from_streak(new_streak)
+    mastery_rules = get_deck_mastery_rules(conn, deck_id)
+    mastery_status = mastery_status_from_rules(
+        new_streak,
+        new_ef,
+        new_interval,
+        mastery_rules,
+    )
     cursor.execute(
         """
         UPDATE cards
