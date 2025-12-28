@@ -11,6 +11,14 @@ router = APIRouter()
 base_dir = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 
+@router.get("/", response_class=HTMLResponse)
+async def list_kids(request: Request, conn = Depends(get_db)):
+    """List all kids."""
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM kids WHERE deleted_at IS NULL ORDER BY name")
+    kids = [dict(row) for row in cursor.fetchall()]
+    return templates.TemplateResponse("kids/index.html", {"request": request, "kids": kids})
+
 @router.get("/new", response_class=HTMLResponse)
 async def new_kid_form(request: Request):
     """Form to add new kid."""
@@ -34,11 +42,60 @@ async def create_kid(name: str = Form(..., description="Kid's name"), conn = Dep
 async def kid_decks(kid_id: int, request: Request, conn = Depends(get_db)):
     """List decks for a specific kid (global decks for now)."""
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name FROM kids WHERE id = ?", (kid_id,))
+    cursor.execute("SELECT id, name FROM kids WHERE id = ? AND deleted_at IS NULL", (kid_id,))
     kid_row = cursor.fetchone()
     if not kid_row:
         raise HTTPException(status_code=404, detail="Kid not found")
     kid = {"id": kid_row[0], "name": kid_row[1]}
-    cursor.execute("SELECT id, name FROM decks ORDER BY name")
+    cursor.execute("SELECT id, name FROM decks WHERE deleted_at IS NULL ORDER BY name")
     decks = [{"id": row[0], "name": row[1]} for row in cursor.fetchall()]
     return templates.TemplateResponse("kids/decks.html", {"request": request, "kid": kid, "decks": decks})
+
+@router.get("/{kid_id}/row", response_class=HTMLResponse)
+async def kid_row(kid_id: int, request: Request, conn = Depends(get_db)):
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM kids WHERE id = ? AND deleted_at IS NULL", (kid_id,))
+    kid = cursor.fetchone()
+    if not kid:
+        raise HTTPException(status_code=404, detail="Kid not found")
+    return templates.TemplateResponse("kids/kid_row.html", {"request": request, "kid": dict(kid)})
+
+@router.get("/{kid_id}/edit", response_class=HTMLResponse)
+async def edit_kid_form(kid_id: int, request: Request, conn = Depends(get_db)):
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM kids WHERE id = ? AND deleted_at IS NULL", (kid_id,))
+    kid = cursor.fetchone()
+    if not kid:
+        raise HTTPException(status_code=404, detail="Kid not found")
+    return templates.TemplateResponse("kids/kid_edit_form.html", {"request": request, "kid": dict(kid)})
+
+@router.post("/{kid_id}/edit", response_class=HTMLResponse)
+async def edit_kid(kid_id: int, request: Request, name: str = Form(...), conn = Depends(get_db)):
+    if not name or not name.strip():
+        raise HTTPException(status_code=400, detail="Name is required")
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE kids SET name = ? WHERE id = ? AND deleted_at IS NULL",
+            (name.strip(), kid_id),
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Kid not found")
+        conn.commit()
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=400, detail="Kid with this name already exists")
+    cursor.execute("SELECT id, name FROM kids WHERE id = ? AND deleted_at IS NULL", (kid_id,))
+    kid = cursor.fetchone()
+    return templates.TemplateResponse("kids/kid_row.html", {"request": request, "kid": dict(kid)})
+
+@router.post("/{kid_id}/delete", response_class=HTMLResponse)
+async def delete_kid(kid_id: int, conn = Depends(get_db)):
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE kids SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL",
+        (kid_id,),
+    )
+    if cursor.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Kid not found")
+    conn.commit()
+    return HTMLResponse("")

@@ -1,18 +1,20 @@
 # SQL schema for MemCoach database
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA_SQL = """
 -- Kids
 CREATE TABLE IF NOT EXISTS kids (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE NOT NULL
+    name TEXT UNIQUE NOT NULL,
+    deleted_at TEXT
 );
 
 -- Decks
 CREATE TABLE IF NOT EXISTS decks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE NOT NULL
+    name TEXT UNIQUE NOT NULL,
+    deleted_at TEXT
 );
 
 -- Deck planning milestones
@@ -32,6 +34,7 @@ CREATE TABLE IF NOT EXISTS texts (
     chunk_strategy TEXT NOT NULL DEFAULT 'lines',
     delimiter TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    deleted_at TEXT,
     FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE
 );
 
@@ -48,6 +51,8 @@ CREATE TABLE IF NOT EXISTS cards (
     ease_factor REAL NOT NULL DEFAULT 2.5,
     streak INTEGER NOT NULL DEFAULT 0,
     mastery_status TEXT NOT NULL DEFAULT 'new' CHECK(mastery_status IN ('new', 'learning', 'mastered')),
+    position INTEGER NOT NULL DEFAULT 0,
+    deleted_at TEXT,
     FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE,
     FOREIGN KEY (text_id) REFERENCES texts (id) ON DELETE SET NULL
 );
@@ -71,8 +76,13 @@ INDEXES_SQL = """
 CREATE INDEX IF NOT EXISTS idx_cards_due ON cards (due_date);
 CREATE INDEX IF NOT EXISTS idx_cards_deck ON cards (deck_id);
 CREATE INDEX IF NOT EXISTS idx_cards_text ON cards (text_id, chunk_index);
+CREATE INDEX IF NOT EXISTS idx_cards_deleted ON cards (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_cards_deck_position ON cards (deck_id, position);
 CREATE INDEX IF NOT EXISTS idx_deck_plans_deck ON deck_plans (deck_id);
 CREATE INDEX IF NOT EXISTS idx_texts_deck ON texts (deck_id);
+CREATE INDEX IF NOT EXISTS idx_texts_deleted ON texts (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_kids_deleted ON kids (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_decks_deleted ON decks (deleted_at);
 CREATE INDEX IF NOT EXISTS idx_reviews_card_kid ON reviews (card_id, kid_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_ts ON reviews (ts);
 """

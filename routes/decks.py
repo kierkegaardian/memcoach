@@ -35,23 +35,23 @@ async def create_deck(name: str = Form(..., description="Deck name"), conn = Dep
 async def list_decks(request: Request, conn = Depends(get_db)):
     """List all decks."""
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name FROM decks ORDER BY name")
-    decks = [{"id": row[0], "name": row[1]} for row in cursor.fetchall()]
+    cursor.execute("SELECT id, name FROM decks WHERE deleted_at IS NULL ORDER BY name")
+    decks = [dict(row) for row in cursor.fetchall()]
     return templates.TemplateResponse("decks/index.html", {"request": request, "decks": decks})
 
 @router.get("/{deck_id}", response_class=HTMLResponse)
 async def deck_detail(deck_id: int, request: Request, kid_id: Optional[int] = None, conn = Depends(get_db)):
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name FROM decks WHERE id = ?", (deck_id,))
+    cursor.execute("SELECT id, name FROM decks WHERE id = ? AND deleted_at IS NULL", (deck_id,))
     deck_row = cursor.fetchone()
     if not deck_row:
         raise HTTPException(status_code=404, detail="Deck not found")
     deck = {"id": deck_row[0], "name": deck_row[1]}
     cursor.execute("""
-        SELECT id, prompt, mastery_status, streak, due_date
+        SELECT id, prompt, mastery_status, streak, due_date, position
         FROM cards
-        WHERE deck_id = ?
-        ORDER BY id
+        WHERE deck_id = ? AND deleted_at IS NULL
+        ORDER BY position, id
     """, (deck_id,))
     cards = [dict(row) for row in cursor.fetchall()]
     mastered = sum(1 for card in cards if card["mastery_status"] == "mastered")
@@ -69,3 +69,60 @@ async def deck_detail(deck_id: int, request: Request, kid_id: Optional[int] = No
             "kid_id": kid_id,
         },
     )
+
+@router.get("/{deck_id}/row", response_class=HTMLResponse)
+async def deck_row(deck_id: int, request: Request, conn = Depends(get_db)):
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM decks WHERE id = ? AND deleted_at IS NULL", (deck_id,))
+    deck = cursor.fetchone()
+    if not deck:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    return templates.TemplateResponse("decks/deck_row.html", {"request": request, "deck": dict(deck)})
+
+@router.get("/{deck_id}/edit", response_class=HTMLResponse)
+async def edit_deck_form(deck_id: int, request: Request, conn = Depends(get_db)):
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM decks WHERE id = ? AND deleted_at IS NULL", (deck_id,))
+    deck = cursor.fetchone()
+    if not deck:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    return templates.TemplateResponse("decks/deck_edit_form.html", {"request": request, "deck": dict(deck)})
+
+@router.post("/{deck_id}/edit", response_class=HTMLResponse)
+async def edit_deck(deck_id: int, request: Request, name: str = Form(...), conn = Depends(get_db)):
+    if not name or not name.strip():
+        raise HTTPException(status_code=400, detail="Name is required")
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE decks SET name = ? WHERE id = ? AND deleted_at IS NULL",
+            (name.strip(), deck_id),
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        conn.commit()
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=400, detail="Deck with this name already exists")
+    cursor.execute("SELECT id, name FROM decks WHERE id = ? AND deleted_at IS NULL", (deck_id,))
+    deck = cursor.fetchone()
+    return templates.TemplateResponse("decks/deck_row.html", {"request": request, "deck": dict(deck)})
+
+@router.post("/{deck_id}/delete", response_class=HTMLResponse)
+async def delete_deck(deck_id: int, conn = Depends(get_db)):
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE decks SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL",
+        (deck_id,),
+    )
+    if cursor.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    cursor.execute(
+        "UPDATE cards SET deleted_at = datetime('now') WHERE deck_id = ? AND deleted_at IS NULL",
+        (deck_id,),
+    )
+    cursor.execute(
+        "UPDATE texts SET deleted_at = datetime('now') WHERE deck_id = ? AND deleted_at IS NULL",
+        (deck_id,),
+    )
+    conn.commit()
+    return HTMLResponse("")

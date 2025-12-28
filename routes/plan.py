@@ -27,7 +27,7 @@ def _week_starts(anchor: date, weeks: int = 8) -> List[date]:
 @router.get("/", response_class=HTMLResponse)
 async def plan_view(request: Request, conn=Depends(get_db)):
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name FROM decks ORDER BY name")
+    cursor.execute("SELECT id, name FROM decks WHERE deleted_at IS NULL ORDER BY name")
     deck_rows = cursor.fetchall()
     decks = [{"id": row[0], "name": row[1]} for row in deck_rows]
 
@@ -47,6 +47,8 @@ async def plan_view(request: Request, conn=Depends(get_db)):
         FROM cards c
         JOIN decks d ON c.deck_id = d.id
         WHERE date(c.due_date) >= date('now')
+        AND c.deleted_at IS NULL
+        AND d.deleted_at IS NULL
         ORDER BY d.name, c.due_date
         """
     )
