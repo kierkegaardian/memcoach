@@ -6,7 +6,7 @@
   {% set diff = token_diff(full_text, user_text) %}
   <div class="space-y-2">
     <div>
-      <p class="font-semibold">You typed:</p>
+      <p class="font-semibold"><strong>You typed:</strong> {{ user_text }}</p>
       <div class="flex flex-wrap gap-1">
         {% if diff.actual %}
           {% for item in diff.actual %}
@@ -20,7 +20,7 @@
       </div>
     </div>
     <div>
-      <p class="font-semibold">Correct:</p>
+      <p class="font-semibold"><strong>Correct:</strong> {{ full_text }}</p>
       <div class="flex flex-wrap gap-1">
         {% for item in diff.expected %}
           <span class="px-1 rounded {% if item.status == 'match' %}bg-transparent{% elif item.status == 'missing' %}bg-red-200 text-red-900{% else %}bg-yellow-200 text-yellow-900{% endif %}">
