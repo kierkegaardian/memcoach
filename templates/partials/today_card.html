@@ -1,5 +1,8 @@
 <div class="bg-white p-6 rounded-lg shadow-md mb-6">
-    <div class="prompt-large">{{ card.prompt }}</div>
+    <div class="flex items-center justify-between mb-2">
+        <div class="prompt-large">{{ card.prompt }}</div>
+        <span class="text-xs uppercase tracking-wide text-gray-500">{{ card.deck_name }}</span>
+    </div>
     {% if card.text_id and card.chunk_index and card.text_total %}
         <p class="text-sm text-gray-600 mb-2">Part {{ card.chunk_index }} of {{ card.text_total }}{% if card.text_title %} • {{ card.text_title }}{% endif %}</p>
     {% endif %}
@@ -10,11 +13,13 @@
             {% endfor %}
         </div>
     {% endif %}
-    <form hx-post="/review/submit?kid_id={{ kid_id }}&deck_id={{ deck_id }}&card_id={{ card.id }}{% if group_texts %}&group_texts=1{% endif %}" hx-target="#result" hx-swap="beforeend" class="space-y-4">
+    <form
+        hx-post="/today/{{ kid_id }}/submit?deck_id={{ card.deck_id }}&card_id={{ card.id }}"
+        hx-target="#today-result"
+        hx-swap="beforeend"
+        class="space-y-4"
+    >
         <input type="hidden" name="started_at" value="{{ started_at }}">
-        {% if group_texts %}
-            <input type="hidden" name="group_texts" value="1">
-        {% endif %}
         <div>
             <label for="hint_mode" class="block text-sm font-semibold text-gray-700 mb-2">Hint mode</label>
             <select

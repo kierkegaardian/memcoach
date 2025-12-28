@@ -1,6 +1,6 @@
 # SQL schema for MemCoach database
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA_SQL = """
 -- Kids
@@ -15,6 +15,20 @@ CREATE TABLE IF NOT EXISTS decks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
     deleted_at TEXT
+);
+
+-- Kid/deck assignments
+CREATE TABLE IF NOT EXISTS assignments (
+    kid_id INTEGER NOT NULL,
+    deck_id INTEGER NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    days_of_week TEXT,
+    new_cap INTEGER,
+    review_cap INTEGER,
+    paused_until TEXT,
+    PRIMARY KEY (kid_id, deck_id),
+    FOREIGN KEY (kid_id) REFERENCES kids (id) ON DELETE CASCADE,
+    FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE
 );
 
 -- Deck planning milestones
@@ -113,6 +127,7 @@ CREATE TABLE IF NOT EXISTS reviews (
     grade TEXT NOT NULL CHECK(grade IN ('perfect', 'good', 'fail')),
     hint_mode TEXT NOT NULL DEFAULT 'none',
     user_text TEXT,
+    duration_seconds INTEGER,
     FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE,
     FOREIGN KEY (kid_id) REFERENCES kids (id) ON DELETE CASCADE
 );
@@ -132,6 +147,8 @@ CREATE INDEX IF NOT EXISTS idx_kids_deleted ON kids (deleted_at);
 CREATE INDEX IF NOT EXISTS idx_decks_deleted ON decks (deleted_at);
 CREATE INDEX IF NOT EXISTS idx_reviews_card_kid ON reviews (card_id, kid_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_ts ON reviews (ts);
+CREATE INDEX IF NOT EXISTS idx_assignments_kid ON assignments (kid_id);
+CREATE INDEX IF NOT EXISTS idx_assignments_deck ON assignments (deck_id);
 CREATE INDEX IF NOT EXISTS idx_tags_name ON tags (name);
 CREATE INDEX IF NOT EXISTS idx_deck_tags_deck ON deck_tags (deck_id);
 CREATE INDEX IF NOT EXISTS idx_deck_tags_tag ON deck_tags (tag_id);
