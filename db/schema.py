@@ -13,6 +13,14 @@ CREATE TABLE IF NOT EXISTS decks (
     name TEXT UNIQUE NOT NULL
 );
 
+-- Deck planning milestones
+CREATE TABLE IF NOT EXISTS deck_plans (
+    deck_id INTEGER PRIMARY KEY,
+    weekly_goal INTEGER,
+    target_date TEXT,
+    FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE
+);
+
 -- Cards (with SM-2 fields)
 CREATE TABLE IF NOT EXISTS cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,6 +51,7 @@ CREATE TABLE IF NOT EXISTS reviews (
 INDEXES_SQL = """
 CREATE INDEX IF NOT EXISTS idx_cards_due ON cards (due_date);
 CREATE INDEX IF NOT EXISTS idx_cards_deck ON cards (deck_id);
+CREATE INDEX IF NOT EXISTS idx_deck_plans_deck ON deck_plans (deck_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_card_kid ON reviews (card_id, kid_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_ts ON reviews (ts);
 """

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Study Plan - MemCoach{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-8">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-3xl font-bold text-gray-800">Study Plan</h2>
+            <p class="text-gray-600">Upcoming due cards grouped by text and section.</p>
+        </div>
+        <a href="/decks" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Back to Decks</a>
+    </div>
+
+    {% if deck_views %}
+        {% for deck in deck_views %}
+            <div class="bg-white rounded-lg shadow p-6 space-y-4">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                        <h3 class="text-2xl font-semibold text-gray-800">{{ deck.name }}</h3>
+                        <p class="text-sm text-gray-500">Text plan settings</p>
+                    </div>
+                    <form method="post" action="/plan/settings" class="flex flex-wrap gap-3 items-end">
+                        <input type="hidden" name="deck_id" value="{{ deck.id }}">
+                        <label class="text-sm text-gray-600">
+                            Weekly goal (chunks)
+                            <input type="number" name="weekly_goal" min="1" value="{{ deck.weekly_goal or '' }}" class="border rounded px-3 py-1 ml-2 w-28">
+                        </label>
+                        <label class="text-sm text-gray-600">
+                            Target date
+                            <input type="date" name="target_date" value="{{ deck.target_date or '' }}" class="border rounded px-3 py-1 ml-2">
+                        </label>
+                        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Save</button>
+                    </form>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm border-collapse">
+                        <thead>
+                            <tr class="text-gray-600 border-b">
+                                <th class="py-2 pr-4">Week</th>
+                                <th class="py-2">Due cards</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for week in week_labels %}
+                                <tr class="border-b">
+                                    <td class="py-2 pr-4 font-medium">
+                                        {{ week.start.strftime('%b %d') }} - {{ week.end.strftime('%b %d') }}
+                                    </td>
+                                    <td class="py-2">{{ deck.forecast[loop.index0] }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div>
+                    <h4 class="text-lg font-semibold text-gray-700 mb-2">Upcoming sections</h4>
+                    {% if deck.cards %}
+                        <ul class="space-y-2">
+                            {% for card in deck.cards %}
+                                <li class="border rounded px-3 py-2 flex flex-col md:flex-row md:items-center md:justify-between">
+                                    <div>
+                                        <p class="font-medium text-gray-800">{{ card.prompt }}</p>
+                                        <p class="text-sm text-gray-500">{{ card.full_text }}</p>
+                                    </div>
+                                    <span class="text-sm text-gray-600 mt-2 md:mt-0">
+                                        Due {{ card.due_date.strftime('%b %d, %Y') if card.due_date else '' }}
+                                    </span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-sm text-gray-500">No upcoming due cards for this text.</p>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p class="text-gray-600">No decks available yet. Add a deck to start planning.</p>
+    {% endif %}
+</div>
+{% endblock %}

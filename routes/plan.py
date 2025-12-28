@@ -1,0 +1,135 @@
+from datetime import date, datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from fastapi import APIRouter, Depends, Form, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+
+from db.database import get_db
+
+router = APIRouter()
+base_dir = Path(__file__).resolve().parent.parent
+templates = Jinja2Templates(directory=str(base_dir / "templates"))
+
+
+def _parse_date(value: Optional[str]) -> Optional[date]:
+    if not value:
+        return None
+    return datetime.strptime(value, "%Y-%m-%d").date()
+
+
+def _week_starts(anchor: date, weeks: int = 8) -> List[date]:
+    week_start = anchor - timedelta(days=anchor.weekday())
+    return [week_start + timedelta(weeks=offset) for offset in range(weeks)]
+
+
+@router.get("/", response_class=HTMLResponse)
+async def plan_view(request: Request, conn=Depends(get_db)):
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM decks ORDER BY name")
+    deck_rows = cursor.fetchall()
+    decks = [{"id": row[0], "name": row[1]} for row in deck_rows]
+
+    cursor.execute("SELECT deck_id, weekly_goal, target_date FROM deck_plans")
+    plan_rows = cursor.fetchall()
+    plan_map = {
+        row[0]: {
+            "weekly_goal": row[1],
+            "target_date": row[2],
+        }
+        for row in plan_rows
+    }
+
+    cursor.execute(
+        """
+        SELECT c.id, c.deck_id, c.prompt, c.full_text, c.due_date, d.name
+        FROM cards c
+        JOIN decks d ON c.deck_id = d.id
+        WHERE date(c.due_date) >= date('now')
+        ORDER BY d.name, c.due_date
+        """
+    )
+    card_rows = cursor.fetchall()
+
+    cards_by_deck: Dict[int, List[dict]] = {deck["id"]: [] for deck in decks}
+    for row in card_rows:
+        due = _parse_date(row[4])
+        cards_by_deck.setdefault(row[1], []).append(
+            {
+                "id": row[0],
+                "prompt": row[2],
+                "full_text": row[3],
+                "due_date": due,
+                "deck_name": row[5],
+            }
+        )
+
+    today = date.today()
+    weeks = _week_starts(today, weeks=8)
+    week_labels = [
+        {
+            "start": week_start,
+            "end": week_start + timedelta(days=6),
+        }
+        for week_start in weeks
+    ]
+
+    deck_views = []
+    for deck in decks:
+        deck_cards = cards_by_deck.get(deck["id"], [])
+        forecast = [0 for _ in weeks]
+        for card in deck_cards:
+            if not card["due_date"]:
+                continue
+            delta_days = (card["due_date"] - weeks[0]).days
+            if delta_days < 0:
+                continue
+            index = delta_days // 7
+            if 0 <= index < len(forecast):
+                forecast[index] += 1
+
+        plan = plan_map.get(deck["id"], {})
+        deck_views.append(
+            {
+                "id": deck["id"],
+                "name": deck["name"],
+                "weekly_goal": plan.get("weekly_goal"),
+                "target_date": plan.get("target_date"),
+                "cards": deck_cards,
+                "forecast": forecast,
+            }
+        )
+
+    return templates.TemplateResponse(
+        "plan.html",
+        {
+            "request": request,
+            "deck_views": deck_views,
+            "week_labels": week_labels,
+        },
+    )
+
+
+@router.post("/settings")
+async def update_plan_settings(
+    deck_id: int = Form(...),
+    weekly_goal: Optional[int] = Form(None),
+    target_date: Optional[str] = Form(None),
+    conn=Depends(get_db),
+):
+    cleaned_goal = int(weekly_goal) if weekly_goal not in (None, "") else None
+    cleaned_target = target_date or None
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO deck_plans (deck_id, weekly_goal, target_date)
+        VALUES (?, ?, ?)
+        ON CONFLICT(deck_id) DO UPDATE SET
+            weekly_goal = excluded.weekly_goal,
+            target_date = excluded.target_date
+        """,
+        (deck_id, cleaned_goal, cleaned_target),
+    )
+    conn.commit()
+    return RedirectResponse(url="/plan", status_code=status.HTTP_303_SEE_OTHER)
