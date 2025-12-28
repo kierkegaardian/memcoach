@@ -28,6 +28,7 @@ def init_db():
         ensure_review_duration(conn)
         ensure_deck_review_mode(conn)
         ensure_review_review_mode(conn)
+        ensure_review_grading_fields(conn)
         ensure_assignment_defaults(conn)
         ensure_schema_version(conn)
         conn.commit()
@@ -111,6 +112,18 @@ def ensure_review_review_mode(conn: sqlite3.Connection) -> None:
         cursor.execute(
             "ALTER TABLE reviews ADD COLUMN review_mode TEXT NOT NULL DEFAULT 'free_recall'"
         )
+
+def ensure_review_grading_fields(conn: sqlite3.Connection) -> None:
+    """Ensure reviews table has grading metadata columns."""
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(reviews)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if "auto_grade" not in columns:
+        cursor.execute("ALTER TABLE reviews ADD COLUMN auto_grade TEXT")
+    if "final_grade" not in columns:
+        cursor.execute("ALTER TABLE reviews ADD COLUMN final_grade TEXT")
+    if "graded_by" not in columns:
+        cursor.execute("ALTER TABLE reviews ADD COLUMN graded_by TEXT NOT NULL DEFAULT 'auto'")
 
 def ensure_assignment_defaults(conn: sqlite3.Connection) -> None:
     """Ensure default assignments exist for all kid/deck pairs."""

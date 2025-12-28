@@ -1,7 +1,57 @@
-<div class="p-4 mb-4 rounded border {{ color_class }}">
+<div id="review-{{ review_id }}" class="p-4 mb-4 rounded border {{ color_class }}">
   <h3 class="font-bold text-lg">Your Grade: {{ grade|default('')|upper }}</h3>
-  <p><strong>You typed:</strong> {{ user_text }}</p>
-  <p><strong>Correct:</strong> {{ full_text }}</p>
+  {% if graded_by == "parent" and auto_grade %}
+    <p class="text-sm text-gray-600">Auto-grade: {{ auto_grade|upper }}</p>
+  {% endif %}
+  {% set diff = token_diff(full_text, user_text) %}
+  <div class="space-y-2">
+    <div>
+      <p class="font-semibold">You typed:</p>
+      <div class="flex flex-wrap gap-1">
+        {% if diff.actual %}
+          {% for item in diff.actual %}
+            <span class="px-1 rounded {% if item.status == 'match' %}bg-transparent{% elif item.status == 'extra' %}bg-blue-200 text-blue-900{% else %}bg-yellow-200 text-yellow-900{% endif %}">
+              {{ item.token }}
+            </span>
+          {% endfor %}
+        {% else %}
+          <span class="text-gray-500">No response.</span>
+        {% endif %}
+      </div>
+    </div>
+    <div>
+      <p class="font-semibold">Correct:</p>
+      <div class="flex flex-wrap gap-1">
+        {% for item in diff.expected %}
+          <span class="px-1 rounded {% if item.status == 'match' %}bg-transparent{% elif item.status == 'missing' %}bg-red-200 text-red-900{% else %}bg-yellow-200 text-yellow-900{% endif %}">
+            {{ item.token }}
+          </span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-3 text-xs text-gray-600">
+      <span class="inline-flex items-center gap-1"><span class="inline-block h-2 w-2 rounded bg-red-200 border border-red-400"></span>Missing</span>
+      <span class="inline-flex items-center gap-1"><span class="inline-block h-2 w-2 rounded bg-blue-200 border border-blue-400"></span>Extra</span>
+      <span class="inline-flex items-center gap-1"><span class="inline-block h-2 w-2 rounded bg-yellow-200 border border-yellow-400"></span>Substitution</span>
+    </div>
+  </div>
+  <form
+    hx-post="/review/override"
+    hx-target="#review-{{ review_id }}"
+    hx-swap="outerHTML"
+    class="mt-3"
+  >
+    <input type="hidden" name="review_id" value="{{ review_id }}">
+    {% if group_texts %}
+      <input type="hidden" name="group_texts" value="1">
+    {% endif %}
+    <p class="text-sm font-semibold text-gray-700 mb-1">Override grade:</p>
+    <div class="flex flex-wrap gap-2">
+      <button type="submit" name="grade" value="perfect" class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">Perfect</button>
+      <button type="submit" name="grade" value="good" class="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600">Good</button>
+      <button type="submit" name="grade" value="fail" class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700">Fail</button>
+    </div>
+  </form>
   <button
     hx-get="/review/next?kid_id={{ kid_id }}&deck_id={{ deck_id }}&hint_mode={{ hint_mode }}{% if group_texts %}&group_texts=1{% endif %}"
     hx-target="#card-container"

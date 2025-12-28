@@ -1,5 +1,6 @@
 from Levenshtein import ratio as lev_ratio
-from typing import Dict, Any
+from difflib import SequenceMatcher
+from typing import Dict, Any, List
 from config import load_config
 from .ollama import grade_with_llm
 from .sm2 import map_grade_to_quality
@@ -33,3 +34,29 @@ def grade_recall(full_text: str, user_text: str, config: Dict[str, Any] = None) 
 def get_quality_score(grade: str) -> int:
     """Map grade to SM-2 quality (0-5)."""
     return map_grade_to_quality(grade)
+
+def token_diff(expected_text: str, actual_text: str) -> Dict[str, List[Dict[str, str]]]:
+    """Compute a whitespace-token diff for display in templates."""
+    expected_tokens = expected_text.split() if expected_text else []
+    actual_tokens = actual_text.split() if actual_text else []
+    matcher = SequenceMatcher(None, expected_tokens, actual_tokens)
+    expected: List[Dict[str, str]] = []
+    actual: List[Dict[str, str]] = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            for token in expected_tokens[i1:i2]:
+                expected.append({"token": token, "status": "match"})
+            for token in actual_tokens[j1:j2]:
+                actual.append({"token": token, "status": "match"})
+        elif tag == "delete":
+            for token in expected_tokens[i1:i2]:
+                expected.append({"token": token, "status": "missing"})
+        elif tag == "insert":
+            for token in actual_tokens[j1:j2]:
+                actual.append({"token": token, "status": "extra"})
+        elif tag == "replace":
+            for token in expected_tokens[i1:i2]:
+                expected.append({"token": token, "status": "substitution"})
+            for token in actual_tokens[j1:j2]:
+                actual.append({"token": token, "status": "substitution"})
+    return {"expected": expected, "actual": actual}
