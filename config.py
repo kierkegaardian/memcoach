@@ -70,9 +70,9 @@ def set_parent_pin_hash(pin_hash: str) -> None:
     def update_section(match: re.Match) -> str:
         section = match.group(1)
         rest = match.group(2)
-        if re.search(r"^pin_hash\\s*=", section, flags=re.MULTILINE):
+        if re.search(r"^pin_hash\s*=", section, flags=re.MULTILINE):
             section = re.sub(
-                r"^pin_hash\\s*=.*$",
+                r"^pin_hash\s*=.*$",
                 f'pin_hash = "{pin_hash}"',
                 section,
                 flags=re.MULTILINE,

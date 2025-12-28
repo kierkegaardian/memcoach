@@ -20,6 +20,8 @@
                 <a href="/kid-mode" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-4 py-2 rounded-md">Kid Mode</a>
                 {% if request.state.parent_pin_configured %}
                     {% if request.state.parent_unlocked %}
+                        <a href="/kids" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-4 py-2 rounded-md">Kids</a>
+                        <a href="/kids/new" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-4 py-2 rounded-md">Add Kid</a>
                         <a href="/admin/backup/manage" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-4 py-2 rounded-md">Parent Admin</a>
                         <a href="/trash" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-4 py-2 rounded-md">Trash</a>
                         <form method="post" action="/parent/lock" class="inline">
