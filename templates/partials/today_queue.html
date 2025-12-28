@@ -1,0 +1,30 @@
+<div class="bg-white border rounded-lg p-4 shadow-sm">
+    <h3 class="text-xl font-semibold mb-4">Assigned decks</h3>
+    {% if assignments %}
+        <div class="space-y-3">
+            {% for assignment in assignments %}
+                <div class="border rounded-lg p-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <p class="font-semibold text-gray-800">{{ assignment.deck_name }}</p>
+                        <p class="text-xs text-gray-500">
+                            {{ assignment.days_of_week }}
+                            {% if assignment.paused_until %}• Paused until {{ assignment.paused_until }}{% endif %}
+                        </p>
+                        <p class="text-xs text-gray-500">
+                            Caps: new {{ assignment.new_cap if assignment.new_cap is not none else '∞' }} • review {{ assignment.review_cap if assignment.review_cap is not none else '∞' }}
+                        </p>
+                    </div>
+                    <div class="text-sm text-gray-600">
+                        <span class="font-semibold text-gray-800">{{ assignment.total_count }}</span> cards
+                        ({{ assignment.new_count }} new, {{ assignment.review_count }} review)
+                        {% if not assignment.active %}
+                            <span class="ml-2 inline-flex items-center px-2 py-1 rounded bg-gray-100 text-gray-500 text-xs">Inactive</span>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p class="text-sm text-gray-500">No assignments yet. Create a deck or kid to auto-assign.</p>
+    {% endif %}
+</div>

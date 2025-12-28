@@ -10,6 +10,7 @@ from utils.mastery import mastery_status_from_streak
 from config import load_config
 import sqlite3
 from typing import Optional, Dict
+from datetime import datetime, timezone
 
 router = APIRouter()
 base_dir = Path(__file__).resolve().parent.parent
@@ -123,6 +124,7 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
             "hint_modes": HINT_MODE_OPTIONS,
             "group_texts": group_texts,
             "deck_tags": deck_tags,
+            "started_at": datetime.now(timezone.utc).isoformat(),
         },
     )
 
@@ -144,6 +146,7 @@ async def next_card(kid_id: int, deck_id: int, request: Request, conn = Depends(
                 "hint_text": build_hint_text(card["full_text"], hint_mode),
                 "hint_modes": HINT_MODE_OPTIONS,
                 "group_texts": group_texts,
+                "started_at": datetime.now(timezone.utc).isoformat(),
             },
         )
     else:
@@ -175,6 +178,7 @@ async def submit_review(
     user_text: str = Form(...),
     hint_mode: str = Form("none"),
     group_texts: str = Form("0"),
+    started_at: Optional[str] = Form(None),
     conn = Depends(get_db),
 ):
     """HTMX endpoint to grade recall, update card/review, return result partial."""
@@ -198,9 +202,19 @@ async def submit_review(
         SET interval_days = ?, ease_factor = ?, streak = ?, due_date = ?, mastery_status = ?
         WHERE id = ?
     """, (new_interval, new_ef, new_streak, new_due.isoformat(), mastery_status, card_id))
+    duration_seconds = None
+    if started_at:
+        try:
+            started = datetime.fromisoformat(started_at)
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            duration_seconds = max(0, int((datetime.now(timezone.utc) - started).total_seconds()))
+        except ValueError:
+            duration_seconds = None
     cursor.execute("""
-        INSERT INTO reviews (card_id, kid_id, grade, user_text, hint_mode) VALUES (?, ?, ?, ?, ?)
-    """, (card_id, kid_id, grade, user_text, hint_mode))
+        INSERT INTO reviews (card_id, kid_id, grade, user_text, hint_mode, duration_seconds)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (card_id, kid_id, grade, user_text, hint_mode, duration_seconds))
     conn.commit()
     color_class = {
         'perfect': 'bg-green-100 border-green-400 text-green-800',

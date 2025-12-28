@@ -1,0 +1,13 @@
+<div class="p-4 mb-4 rounded border {{ color_class }}">
+  <h3 class="font-bold text-lg">Your Grade: {{ grade|default('')|upper }}</h3>
+  <p><strong>You typed:</strong> {{ user_text }}</p>
+  <p><strong>Correct:</strong> {{ full_text }}</p>
+  <button
+    hx-get="/today/{{ kid_id }}/next?hint_mode={{ hint_mode }}"
+    hx-target="#today-card"
+    hx-swap="innerHTML"
+    class="bg-blue-500 text-white px-4 py-2 rounded mt-2 hover:bg-blue-600"
+  >
+    Next Card
+  </button>
+</div>

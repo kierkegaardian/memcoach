@@ -33,6 +33,11 @@ async def create_kid(name: str = Form(..., description="Kid's name"), conn = Dep
     cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO kids (name) VALUES (?)", (name,))
+        kid_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT OR IGNORE INTO assignments (kid_id, deck_id) SELECT ?, id FROM decks WHERE deleted_at IS NULL",
+            (kid_id,),
+        )
         conn.commit()
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     except sqlite3.IntegrityError:

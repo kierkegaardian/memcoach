@@ -25,6 +25,8 @@ def init_db():
         ensure_soft_delete_columns(conn)
         ensure_card_position(conn)
         ensure_cards_fts(conn)
+        ensure_review_duration(conn)
+        ensure_assignment_defaults(conn)
         ensure_schema_version(conn)
         conn.commit()
     run_daily_backup()
@@ -79,6 +81,27 @@ def ensure_cards_fts(conn: sqlite3.Connection) -> None:
     cards_count = cursor.fetchone()[0] or 0
     if fts_count < cards_count:
         cursor.execute("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
+
+def ensure_review_duration(conn: sqlite3.Connection) -> None:
+    """Ensure reviews table has duration_seconds column."""
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(reviews)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if "duration_seconds" not in columns:
+        cursor.execute("ALTER TABLE reviews ADD COLUMN duration_seconds INTEGER")
+
+def ensure_assignment_defaults(conn: sqlite3.Connection) -> None:
+    """Ensure default assignments exist for all kid/deck pairs."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO assignments (kid_id, deck_id)
+        SELECT k.id, d.id
+        FROM kids k
+        CROSS JOIN decks d
+        WHERE k.deleted_at IS NULL AND d.deleted_at IS NULL
+        """
+    )
 
 def get_schema_version(conn: sqlite3.Connection) -> int:
     """Read the SQLite schema version from PRAGMA user_version."""

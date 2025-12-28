@@ -15,7 +15,7 @@ sys.path.insert(0, str(base_dir))
 
 from db.database import init_db, get_db
 from config import load_config, CONFIG_DIR
-from routes import kids, decks, cards, review, stats, plan, backups, trash, search, parent, kid_mode  # Import routers
+from routes import kids, decks, cards, review, stats, plan, backups, trash, search, parent, kid_mode, today  # Import routers
 from utils.auth import is_parent_unlocked
 
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
@@ -28,6 +28,7 @@ app.include_router(kids.router, prefix="/kids", tags=["kids"])
 app.include_router(decks.router, prefix="/decks", tags=["decks"])
 app.include_router(cards.router, prefix="/decks", tags=["cards"])  # /decks/{deck_id}/cards
 app.include_router(review.router, prefix="/review", tags=["review"])
+app.include_router(today.router, tags=["today"])
 app.include_router(stats.router, prefix="/stats", tags=["stats"])
 app.include_router(plan.router, prefix="/plan", tags=["plan"])
 app.include_router(backups.router, prefix="/admin", tags=["admin"])
