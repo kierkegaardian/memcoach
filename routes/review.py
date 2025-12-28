@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from db.database import get_db
 from utils.grading import grade_recall
+from utils.hints import build_hint_text, normalize_hint_mode, HINT_MODE_OPTIONS
 from utils.sm2 import update_sm2, map_grade_to_quality
 from utils.mastery import mastery_status_from_streak
 from config import load_config
@@ -45,20 +46,61 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
     if not deck_row:
         raise HTTPException(status_code=404, detail="Deck not found")
     deck = {"id": deck_row[0], "name": deck_row[1]}
+    hint_mode = normalize_hint_mode(request.query_params.get("hint_mode"))
     card = get_next_card_for_review(kid_id, deck_id, conn)
+    hint_text = build_hint_text(card["full_text"], hint_mode) if card else ""
     return templates.TemplateResponse(
         "review.html",
-        {"request": request, "kid": kid, "deck": deck, "card": card, "kid_id": kid_id, "deck_id": deck_id}
+        {
+            "request": request,
+            "kid": kid,
+            "deck": deck,
+            "card": card,
+            "kid_id": kid_id,
+            "deck_id": deck_id,
+            "hint_mode": hint_mode,
+            "hint_text": hint_text,
+            "hint_modes": HINT_MODE_OPTIONS,
+        },
     )
 
 @router.get("/next")
 async def next_card(kid_id: int, deck_id: int, request: Request, conn = Depends(get_db)):
     """HTMX endpoint for next card partial."""
+    hint_mode = normalize_hint_mode(request.query_params.get("hint_mode"))
     card = get_next_card_for_review(kid_id, deck_id, conn)
     if card:
-        return templates.TemplateResponse("partials/card.html", {"request": request, "card": card, "kid_id": kid_id, "deck_id": deck_id})
+        return templates.TemplateResponse(
+            "partials/card.html",
+            {
+                "request": request,
+                "card": card,
+                "kid_id": kid_id,
+                "deck_id": deck_id,
+                "hint_mode": hint_mode,
+                "hint_text": build_hint_text(card["full_text"], hint_mode),
+                "hint_modes": HINT_MODE_OPTIONS,
+            },
+        )
     else:
-        return templates.TemplateResponse("partials/no_cards.html", {"request": request, "kid_id": kid_id, "deck_id": deck_id})
+        return templates.TemplateResponse(
+            "partials/no_cards.html",
+            {"request": request, "kid_id": kid_id, "deck_id": deck_id},
+        )
+
+
+@router.get("/hint", response_class=HTMLResponse)
+async def hint_text(card_id: int, hint_mode: str = "none", conn = Depends(get_db)):
+    """HTMX endpoint for hint text updates."""
+    cursor = conn.cursor()
+    cursor.execute("SELECT full_text FROM cards WHERE id = ?", (card_id,))
+    card_row = cursor.fetchone()
+    if not card_row:
+        raise HTTPException(status_code=404, detail="Card not found")
+    full_text = card_row[0]
+    hint_mode = normalize_hint_mode(hint_mode)
+    hint_text_value = build_hint_text(full_text, hint_mode)
+    return HTMLResponse(hint_text_value or "No hint is shown for this card.")
 
 @router.post("/submit")
 async def submit_review(
@@ -67,6 +109,7 @@ async def submit_review(
     card_id: int,
     request: Request,
     user_text: str = Form(...),
+    hint_mode: str = Form("none"),
     conn = Depends(get_db),
 ):
     """HTMX endpoint to grade recall, update card/review, return result partial."""
@@ -78,6 +121,7 @@ async def submit_review(
         raise HTTPException(status_code=404, detail="Card not found")
     card = dict(card_row)
     full_text = card['full_text']
+    hint_mode = normalize_hint_mode(hint_mode)
     grade = grade_recall(full_text, user_text, config)
     quality = map_grade_to_quality(grade)
     new_interval, new_ef, new_streak, new_due = update_sm2(
@@ -90,8 +134,8 @@ async def submit_review(
         WHERE id = ?
     """, (new_interval, new_ef, new_streak, new_due.isoformat(), mastery_status, card_id))
     cursor.execute("""
-        INSERT INTO reviews (card_id, kid_id, grade, user_text) VALUES (?, ?, ?, ?)
-    """, (card_id, kid_id, grade, user_text))
+        INSERT INTO reviews (card_id, kid_id, grade, user_text, hint_mode) VALUES (?, ?, ?, ?, ?)
+    """, (card_id, kid_id, grade, user_text, hint_mode))
     conn.commit()
     color_class = {
         'perfect': 'bg-green-100 border-green-400 text-green-800',
@@ -108,5 +152,6 @@ async def submit_review(
             "full_text": full_text,
             "kid_id": kid_id,
             "deck_id": deck_id,
+            "hint_mode": hint_mode,
         },
     )
