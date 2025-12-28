@@ -15,18 +15,49 @@ router = APIRouter()
 base_dir = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 
-def get_next_card_for_review(kid_id: int, deck_id: int, conn) -> Optional[Dict]:
+def get_next_card_for_review(kid_id: int, deck_id: int, conn, group_texts: bool = False) -> Optional[Dict]:
     """Get next due card for kid and deck (simple: due and not reviewed today)."""
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT c.* FROM cards c
-        WHERE c.deck_id = ? AND c.due_date <= date('now')
-        AND NOT EXISTS (
-            SELECT 1 FROM reviews r WHERE r.card_id = c.id AND r.kid_id = ? AND date(r.ts) = date('now')
+    if group_texts:
+        cursor.execute(
+            """
+            SELECT
+                c.*,
+                t.title AS text_title,
+                (
+                    SELECT COUNT(*) FROM cards c2 WHERE c2.text_id = c.text_id
+                ) AS text_total
+            FROM cards c
+            LEFT JOIN texts t ON t.id = c.text_id
+            WHERE c.deck_id = ? AND c.due_date <= date('now')
+            AND NOT EXISTS (
+                SELECT 1 FROM reviews r WHERE r.card_id = c.id AND r.kid_id = ? AND date(r.ts) = date('now')
+            )
+            ORDER BY c.due_date ASC, (c.text_id IS NULL), c.text_id, c.chunk_index
+            LIMIT 1
+            """,
+            (deck_id, kid_id),
         )
-        ORDER BY c.due_date ASC, random()
-        LIMIT 1
-    """, (deck_id, kid_id))
+    else:
+        cursor.execute(
+            """
+            SELECT
+                c.*,
+                t.title AS text_title,
+                (
+                    SELECT COUNT(*) FROM cards c2 WHERE c2.text_id = c.text_id
+                ) AS text_total
+            FROM cards c
+            LEFT JOIN texts t ON t.id = c.text_id
+            WHERE c.deck_id = ? AND c.due_date <= date('now')
+            AND NOT EXISTS (
+                SELECT 1 FROM reviews r WHERE r.card_id = c.id AND r.kid_id = ? AND date(r.ts) = date('now')
+            )
+            ORDER BY c.due_date ASC, random()
+            LIMIT 1
+            """,
+            (deck_id, kid_id),
+        )
     row = cursor.fetchone()
     if row:
         return dict(row)
@@ -47,7 +78,8 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
         raise HTTPException(status_code=404, detail="Deck not found")
     deck = {"id": deck_row[0], "name": deck_row[1]}
     hint_mode = normalize_hint_mode(request.query_params.get("hint_mode"))
-    card = get_next_card_for_review(kid_id, deck_id, conn)
+    group_texts = request.query_params.get("group_texts") == "1"
+    card = get_next_card_for_review(kid_id, deck_id, conn, group_texts=group_texts)
     hint_text = build_hint_text(card["full_text"], hint_mode) if card else ""
     return templates.TemplateResponse(
         "review.html",
@@ -61,6 +93,7 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
             "hint_mode": hint_mode,
             "hint_text": hint_text,
             "hint_modes": HINT_MODE_OPTIONS,
+            "group_texts": group_texts,
         },
     )
 
@@ -68,7 +101,8 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
 async def next_card(kid_id: int, deck_id: int, request: Request, conn = Depends(get_db)):
     """HTMX endpoint for next card partial."""
     hint_mode = normalize_hint_mode(request.query_params.get("hint_mode"))
-    card = get_next_card_for_review(kid_id, deck_id, conn)
+    group_texts = request.query_params.get("group_texts") == "1"
+    card = get_next_card_for_review(kid_id, deck_id, conn, group_texts=group_texts)
     if card:
         return templates.TemplateResponse(
             "partials/card.html",
@@ -80,12 +114,13 @@ async def next_card(kid_id: int, deck_id: int, request: Request, conn = Depends(
                 "hint_mode": hint_mode,
                 "hint_text": build_hint_text(card["full_text"], hint_mode),
                 "hint_modes": HINT_MODE_OPTIONS,
+                "group_texts": group_texts,
             },
         )
     else:
         return templates.TemplateResponse(
             "partials/no_cards.html",
-            {"request": request, "kid_id": kid_id, "deck_id": deck_id},
+            {"request": request, "kid_id": kid_id, "deck_id": deck_id, "group_texts": group_texts},
         )
 
 
@@ -110,6 +145,7 @@ async def submit_review(
     request: Request,
     user_text: str = Form(...),
     hint_mode: str = Form("none"),
+    group_texts: str = Form("0"),
     conn = Depends(get_db),
 ):
     """HTMX endpoint to grade recall, update card/review, return result partial."""
@@ -153,5 +189,6 @@ async def submit_review(
             "kid_id": kid_id,
             "deck_id": deck_id,
             "hint_mode": hint_mode,
+            "group_texts": group_texts == "1",
         },
     )

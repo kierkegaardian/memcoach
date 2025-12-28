@@ -14,6 +14,7 @@ def init_db():
         conn.executescript(SCHEMA_SQL)
         conn.executescript(INDEXES_SQL)
         ensure_card_mastery_status(conn)
+        ensure_card_chunk_fields(conn)
         conn.commit()
 
 def ensure_card_mastery_status(conn: sqlite3.Connection) -> None:
@@ -25,6 +26,16 @@ def ensure_card_mastery_status(conn: sqlite3.Connection) -> None:
         cursor.execute(
             "ALTER TABLE cards ADD COLUMN mastery_status TEXT NOT NULL DEFAULT 'new'"
         )
+
+def ensure_card_chunk_fields(conn: sqlite3.Connection) -> None:
+    """Ensure cards table has chunking columns for long texts."""
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(cards)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if "text_id" not in columns:
+        cursor.execute("ALTER TABLE cards ADD COLUMN text_id INTEGER")
+    if "chunk_index" not in columns:
+        cursor.execute("ALTER TABLE cards ADD COLUMN chunk_index INTEGER")
 
 @contextmanager
 def get_conn():
