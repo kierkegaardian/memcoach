@@ -61,7 +61,10 @@
                 >
                     🎙️ Start voice input
                 </button>
-                <span class="voice-status"></span>
+                <div class="flex flex-col text-xs">
+                    <span class="voice-status text-emerald-700 font-medium">Tap mic to start.</span>
+                    <span class="voice-preview text-gray-500"></span>
+                </div>
             </div>
             <button type="submit" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-8 rounded-lg text-lg transition w-full">Check My Recall</button>
         {% elif review_mode == "first_letters" %}
@@ -77,7 +80,10 @@
                 >
                     🎙️ Start voice input
                 </button>
-                <span class="voice-status"></span>
+                <div class="flex flex-col text-xs">
+                    <span class="voice-status text-emerald-700 font-medium">Tap mic to start.</span>
+                    <span class="voice-preview text-gray-500"></span>
+                </div>
             </div>
             <button type="submit" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-8 rounded-lg text-lg transition w-full">Check My Recall</button>
         {% else %}
@@ -113,7 +119,10 @@
                 >
                     🎙️ Start voice input
                 </button>
-                <span class="voice-status"></span>
+                <div class="flex flex-col text-xs">
+                    <span class="voice-status text-emerald-700 font-medium">Tap mic to start.</span>
+                    <span class="voice-preview text-gray-500"></span>
+                </div>
             </div>
             <button type="submit" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-8 rounded-lg text-lg transition w-full">I'm Done - Check My Recall!</button>
         {% endif %}

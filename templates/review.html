@@ -126,6 +126,9 @@
             document.querySelectorAll('.voice-status').forEach((el) => {
                 el.textContent = 'Voice input not supported in this browser.';
             });
+            document.querySelectorAll('.voice-preview').forEach((el) => {
+                el.textContent = '';
+            });
             return;
         }
 
@@ -137,6 +140,7 @@
         let activeButton = null;
         let activeStatus = null;
         let activeInput = null;
+        let activePreview = null;
         let finalTranscript = '';
         let shouldListen = false;
         let restartTimer = null;
@@ -144,6 +148,12 @@
         const setStatus = (message) => {
             if (activeStatus) {
                 activeStatus.textContent = message;
+            }
+        };
+
+        const setPreview = (message) => {
+            if (activePreview) {
+                activePreview.textContent = message;
             }
         };
 
@@ -157,6 +167,7 @@
             activeButton = null;
             activeStatus = null;
             activeInput = null;
+            activePreview = null;
             finalTranscript = '';
         };
 
@@ -196,7 +207,8 @@
         };
 
         recognizer.onstart = () => {
-            setStatus('Listening...');
+            setStatus('Listening... Speak now.');
+            setPreview('');
             setButtonLabel('🛑 Stop voice input');
         };
 
@@ -213,18 +225,26 @@
             if (activeInput) {
                 const combined = (finalTranscript + interim).trim();
                 activeInput.value = combined;
+                if (combined) {
+                    const previewText = combined.length > 120 ? `${combined.slice(0, 117)}…` : combined;
+                    setPreview(`Heard: ${previewText}`);
+                } else {
+                    setPreview('');
+                }
             }
         };
 
         recognizer.onerror = (event) => {
             if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
                 setStatus('Microphone access denied.');
+                setPreview('');
                 setButtonLabel('🎙️ Start voice input');
                 stopRecognizer();
                 resetState();
                 return;
             }
             setStatus(`Voice input error: ${event.error}`);
+            setPreview('');
         };
 
         recognizer.onend = () => {
@@ -234,6 +254,7 @@
                 return;
             }
             setStatus(finalTranscript ? 'Transcription ready.' : 'Voice input stopped.');
+            setPreview(finalTranscript ? 'Transcript ready.' : '');
             setButtonLabel('🎙️ Start voice input');
             resetState();
         };
@@ -262,6 +283,7 @@
             const targetName = button.dataset.voiceTarget;
             const input = container.querySelector(`[name="${targetName}"]`);
             const status = button.parentElement.querySelector('.voice-status');
+            const preview = button.parentElement.querySelector('.voice-preview');
 
             if (!input) {
                 return;
@@ -270,10 +292,12 @@
             activeButton = button;
             activeStatus = status;
             activeInput = input;
+            activePreview = preview;
             finalTranscript = input.value ? input.value + ' ' : '';
             shouldListen = true;
 
             setStatus('Starting mic...');
+            setPreview('');
             startRecognizer();
         });
     })();
