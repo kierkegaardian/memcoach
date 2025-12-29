@@ -22,7 +22,62 @@ def _resolve_stt_config() -> dict:
         "language": stt_cfg.get("language"),
         "device": stt_cfg.get("device", "cpu"),
         "compute_type": stt_cfg.get("compute_type", "int8"),
+        "no_speech_threshold": stt_cfg.get("no_speech_threshold", 0.6),
+        "log_prob_threshold": stt_cfg.get("log_prob_threshold", -1.0),
+        "fallback_no_speech_threshold": stt_cfg.get(
+            "fallback_no_speech_threshold", 0.9
+        ),
+        "fallback_log_prob_threshold": stt_cfg.get(
+            "fallback_log_prob_threshold", -5.0
+        ),
     }
+
+
+def _normalize_language(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    if value.lower() in {"auto", "detect", "none"}:
+        return None
+    return value
+
+
+def _transcribe_faster_whisper(
+    model,
+    audio_path: Path,
+    *,
+    language: Optional[str],
+    no_speech_threshold: float,
+    log_prob_threshold: float,
+) -> str:
+    segments, _info = model.transcribe(
+        str(audio_path),
+        language=language,
+        no_speech_threshold=no_speech_threshold,
+        log_prob_threshold=log_prob_threshold,
+    )
+    text = " ".join(segment.text.strip() for segment in segments if segment.text)
+    return text.strip()
+
+
+def _transcribe_whisper(
+    model,
+    audio_path: Path,
+    *,
+    language: Optional[str],
+    no_speech_threshold: float,
+    log_prob_threshold: float,
+) -> str:
+    result = model.transcribe(
+        str(audio_path),
+        fp16=False,
+        language=language,
+        no_speech_threshold=no_speech_threshold,
+        logprob_threshold=log_prob_threshold,
+    )
+    return (result.get("text") or "").strip()
 
 
 def _require_ffmpeg() -> None:
@@ -81,21 +136,44 @@ def _load_backend() -> dict:
 def _transcribe_sync(audio_path: Path) -> str:
     backend = _load_backend()
     cfg = backend["config"]
+    language = _normalize_language(cfg.get("language"))
     with _TRANSCRIBE_LOCK:
         if backend["name"] == "faster-whisper":
-            segments, _info = backend["model"].transcribe(
-                str(audio_path),
-                language=cfg.get("language"),
+            text = _transcribe_faster_whisper(
+                backend["model"],
+                audio_path,
+                language=language,
+                no_speech_threshold=cfg.get("no_speech_threshold", 0.6),
+                log_prob_threshold=cfg.get("log_prob_threshold", -1.0),
             )
-            text = " ".join(segment.text.strip() for segment in segments if segment.text)
-            return text.strip()
+            if text:
+                return text
+            fallback_text = _transcribe_faster_whisper(
+                backend["model"],
+                audio_path,
+                language=language,
+                no_speech_threshold=cfg.get("fallback_no_speech_threshold", 0.9),
+                log_prob_threshold=cfg.get("fallback_log_prob_threshold", -5.0),
+            )
+            return fallback_text
         if backend["name"] == "whisper":
-            result = backend["model"].transcribe(
-                str(audio_path),
-                fp16=False,
-                language=cfg.get("language"),
+            text = _transcribe_whisper(
+                backend["model"],
+                audio_path,
+                language=language,
+                no_speech_threshold=cfg.get("no_speech_threshold", 0.6),
+                log_prob_threshold=cfg.get("log_prob_threshold", -1.0),
             )
-            return (result.get("text") or "").strip()
+            if text:
+                return text
+            fallback_text = _transcribe_whisper(
+                backend["model"],
+                audio_path,
+                language=language,
+                no_speech_threshold=cfg.get("fallback_no_speech_threshold", 0.9),
+                log_prob_threshold=cfg.get("fallback_log_prob_threshold", -5.0),
+            )
+            return fallback_text
     raise RuntimeError("Unsupported transcription backend.")
 
 

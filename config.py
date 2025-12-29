@@ -56,6 +56,22 @@ def load_config() -> Dict[str, Any]:
         "language": os.getenv("STT_LANGUAGE", stt_cfg.get("language", "en")),
         "device": os.getenv("STT_DEVICE", stt_cfg.get("device", "cpu")),
         "compute_type": os.getenv("STT_COMPUTE_TYPE", stt_cfg.get("compute_type", "int8")),
+        "no_speech_threshold": float(os.getenv(
+            "STT_NO_SPEECH_THRESHOLD",
+            stt_cfg.get("no_speech_threshold", 0.6),
+        )),
+        "log_prob_threshold": float(os.getenv(
+            "STT_LOG_PROB_THRESHOLD",
+            stt_cfg.get("log_prob_threshold", -1.0),
+        )),
+        "fallback_no_speech_threshold": float(os.getenv(
+            "STT_FALLBACK_NO_SPEECH_THRESHOLD",
+            stt_cfg.get("fallback_no_speech_threshold", 0.9),
+        )),
+        "fallback_log_prob_threshold": float(os.getenv(
+            "STT_FALLBACK_LOG_PROB_THRESHOLD",
+            stt_cfg.get("fallback_log_prob_threshold", -5.0),
+        )),
     }
     return config
 

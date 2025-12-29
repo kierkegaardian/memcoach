@@ -24,3 +24,7 @@ model = "base"
 language = "en"
 device = "cpu"
 compute_type = "int8"
+no_speech_threshold = 0.6
+log_prob_threshold = -1.0
+fallback_no_speech_threshold = 0.9
+fallback_log_prob_threshold = -5.0
