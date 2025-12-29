@@ -95,4 +95,106 @@
         }
     });
 </script>
+<script>
+    (function () {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            document.querySelectorAll('.voice-status').forEach((el) => {
+                el.textContent = 'Voice input not supported in this browser.';
+            });
+            return;
+        }
+
+        const recognizer = new SpeechRecognition();
+        recognizer.lang = 'en-US';
+        recognizer.interimResults = true;
+        recognizer.continuous = false;
+
+        let activeButton = null;
+        let activeStatus = null;
+        let activeInput = null;
+        let finalTranscript = '';
+
+        const setStatus = (message) => {
+            if (activeStatus) {
+                activeStatus.textContent = message;
+            }
+        };
+
+        const setButtonLabel = (label) => {
+            if (activeButton) {
+                activeButton.textContent = label;
+            }
+        };
+
+        const resetState = () => {
+            activeButton = null;
+            activeStatus = null;
+            activeInput = null;
+            finalTranscript = '';
+        };
+
+        recognizer.onstart = () => {
+            setStatus('Listening...');
+            setButtonLabel('🛑 Stop voice input');
+        };
+
+        recognizer.onresult = (event) => {
+            let interim = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const transcript = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    finalTranscript += transcript + ' ';
+                } else {
+                    interim += transcript;
+                }
+            }
+            if (activeInput) {
+                const combined = (finalTranscript + interim).trim();
+                activeInput.value = combined;
+            }
+        };
+
+        recognizer.onerror = (event) => {
+            setStatus(`Voice input error: ${event.error}`);
+            setButtonLabel('🎙️ Start voice input');
+        };
+
+        recognizer.onend = () => {
+            setStatus(finalTranscript ? 'Transcription ready.' : 'Voice input stopped.');
+            setButtonLabel('🎙️ Start voice input');
+            resetState();
+        };
+
+        document.addEventListener('click', (event) => {
+            const button = event.target.closest('.voice-btn');
+            if (!button) {
+                return;
+            }
+            event.preventDefault();
+
+            if (activeButton) {
+                recognizer.stop();
+                return;
+            }
+
+            const container = button.closest('form') || document;
+            const targetName = button.dataset.voiceTarget;
+            const input = container.querySelector(`[name="${targetName}"]`);
+            const status = button.parentElement.querySelector('.voice-status');
+
+            if (!input) {
+                return;
+            }
+
+            activeButton = button;
+            activeStatus = status;
+            activeInput = input;
+            finalTranscript = input.value ? input.value + ' ' : '';
+
+            setStatus('Starting mic...');
+            recognizer.start();
+        });
+    })();
+</script>
 {% endblock %}
