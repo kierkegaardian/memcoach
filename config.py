@@ -56,6 +56,14 @@ def load_config() -> Dict[str, Any]:
         "language": os.getenv("STT_LANGUAGE", stt_cfg.get("language", "en")),
         "device": os.getenv("STT_DEVICE", stt_cfg.get("device", "cpu")),
         "compute_type": os.getenv("STT_COMPUTE_TYPE", stt_cfg.get("compute_type", "int8")),
+        "normalize_audio": os.getenv(
+            "STT_NORMALIZE_AUDIO",
+            str(stt_cfg.get("normalize_audio", True)),
+        ).lower() == "true",
+        "vad_filter": os.getenv(
+            "STT_VAD_FILTER",
+            str(stt_cfg.get("vad_filter", True)),
+        ).lower() == "true",
         "no_speech_threshold": float(os.getenv(
             "STT_NO_SPEECH_THRESHOLD",
             stt_cfg.get("no_speech_threshold", 0.6),

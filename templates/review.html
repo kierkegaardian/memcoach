@@ -261,6 +261,9 @@
                 return;
             }
             try {
+                if (localRecorder.state === 'recording' && localRecorder.requestData) {
+                    localRecorder.requestData();
+                }
                 localRecorder.stop();
             } catch (err) {
                 // Ignore stop errors if recorder already stopped.
@@ -472,7 +475,7 @@
                 resetLocalState();
             };
 
-            localRecorder.start();
+            localRecorder.start(250);
             setLocalStatus('Recording... Tap stop when done.');
         });
     })();

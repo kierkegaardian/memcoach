@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+import subprocess
+import tempfile
 import threading
 from pathlib import Path
 from typing import Optional
@@ -30,6 +32,8 @@ def _resolve_stt_config() -> dict:
         "fallback_log_prob_threshold": stt_cfg.get(
             "fallback_log_prob_threshold", -5.0
         ),
+        "normalize_audio": stt_cfg.get("normalize_audio", True),
+        "vad_filter": stt_cfg.get("vad_filter", True),
     }
 
 
@@ -51,12 +55,14 @@ def _transcribe_faster_whisper(
     language: Optional[str],
     no_speech_threshold: float,
     log_prob_threshold: float,
+    vad_filter: bool,
 ) -> str:
     segments, _info = model.transcribe(
         str(audio_path),
         language=language,
         no_speech_threshold=no_speech_threshold,
         log_prob_threshold=log_prob_threshold,
+        vad_filter=vad_filter,
     )
     text = " ".join(segment.text.strip() for segment in segments if segment.text)
     return text.strip()
@@ -83,6 +89,41 @@ def _transcribe_whisper(
 def _require_ffmpeg() -> None:
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg is required for local transcription.")
+
+
+def _prepare_audio(audio_path: Path, cfg: dict) -> Path:
+    if not cfg.get("normalize_audio", True):
+        return audio_path
+    _require_ffmpeg()
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+        output_path = Path(tmp.name)
+    command = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        str(audio_path),
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-af",
+        "dynaudnorm",
+        str(output_path),
+    ]
+    try:
+        subprocess.run(
+            command,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+    except subprocess.CalledProcessError:
+        output_path.unlink(missing_ok=True)
+        return audio_path
+    return output_path
 
 
 def _load_backend() -> dict:
@@ -137,43 +178,50 @@ def _transcribe_sync(audio_path: Path) -> str:
     backend = _load_backend()
     cfg = backend["config"]
     language = _normalize_language(cfg.get("language"))
+    prepared_path = _prepare_audio(audio_path, cfg)
     with _TRANSCRIBE_LOCK:
-        if backend["name"] == "faster-whisper":
-            text = _transcribe_faster_whisper(
-                backend["model"],
-                audio_path,
-                language=language,
-                no_speech_threshold=cfg.get("no_speech_threshold", 0.6),
-                log_prob_threshold=cfg.get("log_prob_threshold", -1.0),
-            )
-            if text:
-                return text
-            fallback_text = _transcribe_faster_whisper(
-                backend["model"],
-                audio_path,
-                language=language,
-                no_speech_threshold=cfg.get("fallback_no_speech_threshold", 0.9),
-                log_prob_threshold=cfg.get("fallback_log_prob_threshold", -5.0),
-            )
-            return fallback_text
-        if backend["name"] == "whisper":
-            text = _transcribe_whisper(
-                backend["model"],
-                audio_path,
-                language=language,
-                no_speech_threshold=cfg.get("no_speech_threshold", 0.6),
-                log_prob_threshold=cfg.get("log_prob_threshold", -1.0),
-            )
-            if text:
-                return text
-            fallback_text = _transcribe_whisper(
-                backend["model"],
-                audio_path,
-                language=language,
-                no_speech_threshold=cfg.get("fallback_no_speech_threshold", 0.9),
-                log_prob_threshold=cfg.get("fallback_log_prob_threshold", -5.0),
-            )
-            return fallback_text
+        try:
+            if backend["name"] == "faster-whisper":
+                text = _transcribe_faster_whisper(
+                    backend["model"],
+                    prepared_path,
+                    language=language,
+                    no_speech_threshold=cfg.get("no_speech_threshold", 0.6),
+                    log_prob_threshold=cfg.get("log_prob_threshold", -1.0),
+                    vad_filter=cfg.get("vad_filter", True),
+                )
+                if text:
+                    return text
+                fallback_text = _transcribe_faster_whisper(
+                    backend["model"],
+                    prepared_path,
+                    language=language,
+                    no_speech_threshold=cfg.get("fallback_no_speech_threshold", 0.9),
+                    log_prob_threshold=cfg.get("fallback_log_prob_threshold", -5.0),
+                    vad_filter=cfg.get("vad_filter", True),
+                )
+                return fallback_text
+            if backend["name"] == "whisper":
+                text = _transcribe_whisper(
+                    backend["model"],
+                    prepared_path,
+                    language=language,
+                    no_speech_threshold=cfg.get("no_speech_threshold", 0.6),
+                    log_prob_threshold=cfg.get("log_prob_threshold", -1.0),
+                )
+                if text:
+                    return text
+                fallback_text = _transcribe_whisper(
+                    backend["model"],
+                    prepared_path,
+                    language=language,
+                    no_speech_threshold=cfg.get("fallback_no_speech_threshold", 0.9),
+                    log_prob_threshold=cfg.get("fallback_log_prob_threshold", -5.0),
+                )
+                return fallback_text
+        finally:
+            if prepared_path != audio_path:
+                prepared_path.unlink(missing_ok=True)
     raise RuntimeError("Unsupported transcription backend.")
 
 
