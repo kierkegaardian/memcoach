@@ -129,13 +129,14 @@
             document.querySelectorAll('.voice-preview').forEach((el) => {
                 el.textContent = '';
             });
-            return;
         }
 
-        const recognizer = new SpeechRecognition();
-        recognizer.lang = 'en-US';
-        recognizer.interimResults = true;
-        recognizer.continuous = true;
+        const recognizer = SpeechRecognition ? new SpeechRecognition() : null;
+        if (recognizer) {
+            recognizer.lang = 'en-US';
+            recognizer.interimResults = true;
+            recognizer.continuous = true;
+        }
 
         let activeButton = null;
         let activeStatus = null;
@@ -151,6 +152,15 @@
         let localRecorder = null;
         let localStream = null;
         let localChunks = [];
+        let activeMeterBar = null;
+        let meterAnimation = null;
+        let meterAudioContext = null;
+        let meterAnalyser = null;
+        let meterSource = null;
+        let meterStream = null;
+        let meterOwnsStream = false;
+        let activeMonitorButton = null;
+        let activeMonitorStatus = null;
 
         const setStatus = (message) => {
             if (activeStatus) {
@@ -200,6 +210,142 @@
             localChunks = [];
         };
 
+        const stopMeter = () => {
+            if (meterAnimation) {
+                window.cancelAnimationFrame(meterAnimation);
+                meterAnimation = null;
+            }
+            if (meterSource) {
+                meterSource.disconnect();
+                meterSource = null;
+            }
+            if (meterAnalyser) {
+                meterAnalyser.disconnect();
+                meterAnalyser = null;
+            }
+            if (meterAudioContext) {
+                meterAudioContext.close().catch(() => {});
+                meterAudioContext = null;
+            }
+            if (meterStream && meterOwnsStream) {
+                meterStream.getTracks().forEach((track) => track.stop());
+            }
+            meterStream = null;
+            meterOwnsStream = false;
+            if (activeMeterBar) {
+                activeMeterBar.style.width = '0%';
+            }
+            activeMeterBar = null;
+        };
+
+        const startMeter = (stream, meterBar, ownsStream) => {
+            stopMeter();
+            if (!stream || !meterBar) {
+                if (ownsStream && stream) {
+                    stream.getTracks().forEach((track) => track.stop());
+                }
+                return;
+            }
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) {
+                if (ownsStream) {
+                    stream.getTracks().forEach((track) => track.stop());
+                }
+                return;
+            }
+            activeMeterBar = meterBar;
+            meterOwnsStream = ownsStream;
+            meterStream = stream;
+            meterAudioContext = new AudioContext();
+            meterAnalyser = meterAudioContext.createAnalyser();
+            meterAnalyser.fftSize = 2048;
+            meterSource = meterAudioContext.createMediaStreamSource(stream);
+            meterSource.connect(meterAnalyser);
+            const data = new Uint8Array(meterAnalyser.fftSize);
+            const tick = () => {
+                meterAnalyser.getByteTimeDomainData(data);
+                let sum = 0;
+                for (let i = 0; i < data.length; i++) {
+                    const value = (data[i] - 128) / 128;
+                    sum += value * value;
+                }
+                const rms = Math.sqrt(sum / data.length);
+                const level = Math.min(1, rms * 3);
+                if (activeMeterBar) {
+                    activeMeterBar.style.width = `${Math.round(level * 100)}%`;
+                }
+                meterAnimation = window.requestAnimationFrame(tick);
+            };
+            tick();
+        };
+
+        const stopMonitor = () => {
+            if (!activeMonitorButton) {
+                return;
+            }
+            activeMonitorButton.textContent = '🎚️ Test mic';
+            if (activeMonitorStatus) {
+                activeMonitorStatus.textContent = 'Mic monitor stopped.';
+            }
+            activeMonitorButton = null;
+            activeMonitorStatus = null;
+            stopMeter();
+        };
+
+        const refreshMicOptions = async () => {
+            const selects = document.querySelectorAll('.mic-select');
+            if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+                selects.forEach((select) => {
+                    select.innerHTML = '<option value="">Microphone list unavailable</option>';
+                    select.disabled = true;
+                });
+                return;
+            }
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const inputs = devices.filter((device) => device.kind === 'audioinput');
+                selects.forEach((select) => {
+                    const currentValue = select.value;
+                    select.innerHTML = '';
+                    const defaultOption = document.createElement('option');
+                    defaultOption.value = '';
+                    defaultOption.textContent = 'Default microphone';
+                    select.appendChild(defaultOption);
+                    inputs.forEach((device, index) => {
+                        const option = document.createElement('option');
+                        option.value = device.deviceId;
+                        option.textContent = device.label || `Microphone ${index + 1}`;
+                        select.appendChild(option);
+                    });
+                    if (currentValue && inputs.some((device) => device.deviceId === currentValue)) {
+                        select.value = currentValue;
+                    }
+                    select.disabled = inputs.length === 0;
+                });
+            } catch (err) {
+                // Ignore device enumeration errors.
+            }
+        };
+
+        const getMicConstraints = (deviceId) => {
+            if (!deviceId) {
+                return { audio: true };
+            }
+            return {
+                audio: {
+                    deviceId: { exact: deviceId },
+                },
+            };
+        };
+
+        refreshMicOptions();
+        if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+            navigator.mediaDevices.addEventListener('devicechange', refreshMicOptions);
+        }
+        document.body.addEventListener('htmx:afterSwap', () => {
+            refreshMicOptions();
+        });
+
         const clearRestart = () => {
             if (restartTimer) {
                 window.clearTimeout(restartTimer);
@@ -210,6 +356,11 @@
         const startRecognizer = () => {
             clearRestart();
             if (!shouldListen) {
+                return;
+            }
+            if (!recognizer) {
+                setStatus('Voice input not supported in this browser.');
+                shouldListen = false;
                 return;
             }
             try {
@@ -228,6 +379,9 @@
         const stopRecognizer = () => {
             shouldListen = false;
             clearRestart();
+            if (!recognizer) {
+                return;
+            }
             try {
                 recognizer.stop();
             } catch (err) {
@@ -270,58 +424,60 @@
             }
         };
 
-        recognizer.onstart = () => {
-            setStatus('Listening... Speak now.');
-            setPreview('');
-            setButtonLabel('🛑 Stop voice input');
-        };
-
-        recognizer.onresult = (event) => {
-            let interim = '';
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                const transcript = event.results[i][0].transcript;
-                if (event.results[i].isFinal) {
-                    finalTranscript += transcript + ' ';
-                } else {
-                    interim += transcript;
-                }
-            }
-            if (activeInput) {
-                const combined = (finalTranscript + interim).trim();
-                activeInput.value = combined;
-                if (combined) {
-                    const previewText = combined.length > 120 ? `${combined.slice(0, 117)}…` : combined;
-                    setPreview(`Heard: ${previewText}`);
-                } else {
-                    setPreview('');
-                }
-            }
-        };
-
-        recognizer.onerror = (event) => {
-            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-                setStatus('Microphone access denied.');
+        if (recognizer) {
+            recognizer.onstart = () => {
+                setStatus('Listening... Speak now.');
                 setPreview('');
-                setButtonLabel('🎙️ Start voice input');
-                stopRecognizer();
-                resetState();
-                return;
-            }
-            setStatus(`Voice input error: ${event.error}`);
-            setPreview('');
-        };
+                setButtonLabel('🛑 Stop voice input');
+            };
 
-        recognizer.onend = () => {
-            if (shouldListen) {
-                setStatus('Listening...');
-                restartTimer = window.setTimeout(startRecognizer, 250);
-                return;
-            }
-            setStatus(finalTranscript ? 'Transcription ready.' : 'Voice input stopped.');
-            setPreview(finalTranscript ? 'Transcript ready.' : '');
-            setButtonLabel('🎙️ Start voice input');
-            resetState();
-        };
+            recognizer.onresult = (event) => {
+                let interim = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript + ' ';
+                    } else {
+                        interim += transcript;
+                    }
+                }
+                if (activeInput) {
+                    const combined = (finalTranscript + interim).trim();
+                    activeInput.value = combined;
+                    if (combined) {
+                        const previewText = combined.length > 120 ? `${combined.slice(0, 117)}…` : combined;
+                        setPreview(`Heard: ${previewText}`);
+                    } else {
+                        setPreview('');
+                    }
+                }
+            };
+
+            recognizer.onerror = (event) => {
+                if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                    setStatus('Microphone access denied.');
+                    setPreview('');
+                    setButtonLabel('🎙️ Start voice input');
+                    stopRecognizer();
+                    resetState();
+                    return;
+                }
+                setStatus(`Voice input error: ${event.error}`);
+                setPreview('');
+            };
+
+            recognizer.onend = () => {
+                if (shouldListen) {
+                    setStatus('Listening...');
+                    restartTimer = window.setTimeout(startRecognizer, 250);
+                    return;
+                }
+                setStatus(finalTranscript ? 'Transcription ready.' : 'Voice input stopped.');
+                setPreview(finalTranscript ? 'Transcript ready.' : '');
+                setButtonLabel('🎙️ Start voice input');
+                resetState();
+            };
+        }
 
         document.addEventListener('click', (event) => {
             const button = event.target.closest('.voice-btn');
@@ -347,10 +503,20 @@
             const container = button.closest('form') || document;
             const targetName = button.dataset.voiceTarget;
             const input = container.querySelector(`[name="${targetName}"]`);
-            const status = button.parentElement.querySelector('.voice-status');
-            const preview = button.parentElement.querySelector('.voice-preview');
+            const controls = button.closest('.voice-controls') || button.parentElement;
+            const status = controls ? controls.querySelector('.voice-status') : null;
+            const preview = controls ? controls.querySelector('.voice-preview') : null;
 
             if (!input) {
+                return;
+            }
+            if (!recognizer) {
+                if (status) {
+                    status.textContent = 'Voice input not supported in this browser.';
+                }
+                if (preview) {
+                    preview.textContent = '';
+                }
                 return;
             }
 
@@ -376,6 +542,7 @@
             if (activeLocalButton && !document.body.contains(activeLocalButton)) {
                 stopLocalRecording();
                 cleanupLocalStream();
+                stopMeter();
                 resetLocalState();
             }
 
@@ -389,8 +556,11 @@
             const container = button.closest('form') || document;
             const targetName = button.dataset.voiceTarget;
             const input = container.querySelector(`[name="${targetName}"]`);
-            const status = button.parentElement.querySelector('.voice-local-status');
-            const preview = button.parentElement.querySelector('.voice-preview');
+            const controls = button.closest('.voice-controls') || button.parentElement;
+            const status = controls ? controls.querySelector('.voice-local-status') : null;
+            const preview = controls ? controls.querySelector('.voice-preview') : null;
+            const micSelect = controls ? controls.querySelector('.mic-select') : null;
+            const meterBar = controls ? controls.querySelector('.mic-meter-bar') : null;
 
             if (!input) {
                 return;
@@ -407,6 +577,7 @@
                 stopRecognizer();
                 resetState();
             }
+            stopMonitor();
 
             activeLocalButton = button;
             activeLocalStatus = status;
@@ -421,15 +592,19 @@
             }
 
             try {
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const constraints = getMicConstraints(micSelect ? micSelect.value : '');
+                localStream = await navigator.mediaDevices.getUserMedia(constraints);
+                refreshMicOptions();
                 const mimeType = getSupportedMimeType();
                 localRecorder = mimeType
                     ? new MediaRecorder(localStream, { mimeType })
                     : new MediaRecorder(localStream);
+                startMeter(localStream, meterBar, false);
             } catch (err) {
                 setLocalStatus('Microphone access denied.');
                 setLocalButtonLabel('🎧 Record & transcribe');
                 cleanupLocalStream();
+                stopMeter();
                 resetLocalState();
                 return;
             }
@@ -442,6 +617,7 @@
 
             localRecorder.onstop = async () => {
                 cleanupLocalStream();
+                stopMeter();
                 const blobType = localRecorder.mimeType || 'audio/webm';
                 const blob = new Blob(localChunks, { type: blobType });
                 const ext = blobType.includes('ogg') ? 'ogg' : 'webm';
@@ -477,6 +653,59 @@
 
             localRecorder.start(250);
             setLocalStatus('Recording... Tap stop when done.');
+        });
+
+        document.addEventListener('click', async (event) => {
+            const button = event.target.closest('.mic-monitor-btn');
+            if (!button) {
+                return;
+            }
+            event.preventDefault();
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                return;
+            }
+
+            const controls = button.closest('.voice-controls') || button.parentElement;
+            const status = controls ? controls.querySelector('.voice-local-status') : null;
+            const micSelect = controls ? controls.querySelector('.mic-select') : null;
+            const meterBar = controls ? controls.querySelector('.mic-meter-bar') : null;
+
+            if (activeLocalButton) {
+                if (status) {
+                    status.textContent = 'Stop recording to test mic.';
+                }
+                return;
+            }
+
+            if (activeMonitorButton === button) {
+                stopMonitor();
+                return;
+            }
+            if (activeMonitorButton) {
+                stopMonitor();
+            }
+
+            activeMonitorButton = button;
+            activeMonitorStatus = status;
+            button.textContent = '⏹ Stop mic test';
+            if (status) {
+                status.textContent = 'Mic monitor active.';
+            }
+
+            try {
+                const constraints = getMicConstraints(micSelect ? micSelect.value : '');
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                refreshMicOptions();
+                startMeter(stream, meterBar, true);
+            } catch (err) {
+                if (status) {
+                    status.textContent = 'Microphone access denied.';
+                }
+                button.textContent = '🎚️ Test mic';
+                activeMonitorButton = null;
+                activeMonitorStatus = null;
+            }
         });
     })();
 </script>
