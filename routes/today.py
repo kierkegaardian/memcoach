@@ -8,9 +8,16 @@ from fastapi.templating import Jinja2Templates
 
 from db.database import get_db
 from utils.grading import grade_recall
-from utils.hints import HINT_MODE_OPTIONS, build_hint_text, normalize_hint_mode
+from utils.hints import (
+    HINT_MODE_OPTIONS,
+    build_hint_text,
+    build_cloze_text,
+    build_first_letters_text,
+    normalize_hint_mode,
+)
 from utils.mastery import mastery_status_from_rules, get_deck_mastery_rules
 from utils.sm2 import map_grade_to_quality, update_sm2
+from utils.auth import require_parent_session
 from config import load_config
 
 router = APIRouter()
@@ -92,6 +99,7 @@ def fetch_due_cards(conn, kid_id: int, deck_id: int) -> List[Dict]:
         SELECT
             c.*,
             d.name AS deck_name,
+            d.review_mode AS review_mode,
             t.title AS text_title,
             (
                 SELECT COUNT(*) FROM cards c2 WHERE c2.text_id = c.text_id
@@ -246,7 +254,10 @@ async def today_next_card(kid_id: int, request: Request, conn=Depends(get_db)):
             {"request": request, "kid_id": kid_id},
         )
     card = queue_cards[0]
-    hint_text = build_hint_text(card["full_text"], hint_mode)
+    review_mode = card.get("review_mode") or "free_recall"
+    hint_text = build_hint_text(card["full_text"], hint_mode) if review_mode == "free_recall" else ""
+    masked_text = build_cloze_text(card["full_text"]) if review_mode == "cloze" else ""
+    initials_text = build_first_letters_text(card["full_text"]) if review_mode == "first_letters" else ""
     return templates.TemplateResponse(
         "partials/today_card.html",
         {
@@ -259,6 +270,9 @@ async def today_next_card(kid_id: int, request: Request, conn=Depends(get_db)):
             "hint_modes": HINT_MODE_OPTIONS,
             "started_at": datetime.now(timezone.utc).isoformat(),
             "assignments": assignments,
+            "review_mode": review_mode,
+            "masked_text": masked_text,
+            "initials_text": initials_text,
         },
     )
 
@@ -269,14 +283,23 @@ async def submit_today_review(
     deck_id: int,
     card_id: int,
     request: Request,
-    user_text: str = Form(...),
+    user_text: str = Form(""),
     hint_mode: str = Form("none"),
+    parent_grade: Optional[str] = Form(None),
     started_at: Optional[str] = Form(None),
     conn=Depends(get_db),
 ):
     config = load_config()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM cards WHERE id = ? AND deleted_at IS NULL", (card_id,))
+    cursor.execute(
+        """
+        SELECT c.*, d.review_mode
+        FROM cards c
+        JOIN decks d ON d.id = c.deck_id
+        WHERE c.id = ? AND c.deleted_at IS NULL AND d.deleted_at IS NULL
+        """,
+        (card_id,),
+    )
     card_row = cursor.fetchone()
     if not card_row:
         raise HTTPException(status_code=404, detail="Card not found")
@@ -285,8 +308,32 @@ async def submit_today_review(
         raise HTTPException(status_code=400, detail="Deck does not match card")
     full_text = card["full_text"]
     hint_mode = normalize_hint_mode(hint_mode)
-    grade = grade_recall(full_text, user_text, config)
-    quality = map_grade_to_quality(grade)
+    review_mode = card.get("review_mode") or "free_recall"
+    if review_mode == "recitation":
+        require_parent_session(request)
+        if parent_grade is None:
+            raise HTTPException(status_code=400, detail="Parent grade required")
+        try:
+            quality = int(parent_grade)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid parent grade")
+        if quality < 0 or quality > 5:
+            raise HTTPException(status_code=400, detail="Invalid parent grade")
+        if quality >= 4:
+            grade = "perfect"
+        elif quality >= 3:
+            grade = "good"
+        else:
+            grade = "fail"
+        user_text = user_text or ""
+        auto_grade = None
+        final_grade = grade
+        graded_by = "parent"
+    else:
+        auto_grade = grade_recall(full_text, user_text, config)
+        final_grade = auto_grade
+        graded_by = "auto"
+        quality = map_grade_to_quality(final_grade)
     new_interval, new_ef, new_streak, new_due = update_sm2(
         card["interval_days"], card["ease_factor"], quality, card["streak"]
     )
@@ -323,13 +370,25 @@ async def submit_today_review(
             auto_grade,
             final_grade,
             graded_by,
+            review_mode,
             user_text,
             hint_mode,
             duration_seconds
         )
-        VALUES (?, ?, ?, ?, ?, 'auto', ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (card_id, kid_id, grade, grade, grade, user_text, hint_mode, duration_seconds),
+        (
+            card_id,
+            kid_id,
+            final_grade,
+            auto_grade,
+            final_grade,
+            graded_by,
+            review_mode,
+            user_text,
+            hint_mode,
+            duration_seconds,
+        ),
     )
     conn.commit()
     color_class = {
@@ -341,12 +400,13 @@ async def submit_today_review(
         "partials/today_review_result.html",
         {
             "request": request,
-            "grade": grade,
-            "color_class": color_class.get(grade, "bg-gray-100"),
+            "grade": final_grade,
+            "color_class": color_class.get(final_grade, "bg-gray-100"),
             "user_text": user_text,
             "full_text": full_text,
             "kid_id": kid_id,
             "deck_id": deck_id,
             "hint_mode": hint_mode,
+            "review_mode": review_mode,
         },
     )

@@ -6,8 +6,9 @@ from db.database import get_db
 from models.kid import KidCreate
 from config import load_config  # For future use
 import sqlite3
+from utils.auth import require_parent_session
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_parent_session)])
 base_dir = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 

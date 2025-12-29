@@ -39,6 +39,7 @@
     hx-post="/review/override"
     hx-target="#review-{{ review_id }}"
     hx-swap="outerHTML"
+    hx-include="#review-filters-{{ review_id }}"
     class="mt-3"
   >
     <input type="hidden" name="review_id" value="{{ review_id }}">
@@ -53,11 +54,39 @@
     </div>
   </form>
   <button
-    hx-get="/review/next?kid_id={{ kid_id }}&deck_id={{ deck_id }}&hint_mode={{ hint_mode }}{% if group_texts %}&group_texts=1{% endif %}"
+    hx-get="/review/next"
+    hx-include="#review-filters-{{ review_id }}"
     hx-target="#card-container"
     hx-swap="innerHTML"
     class="bg-blue-500 text-white px-4 py-2 rounded mt-2 hover:bg-blue-600"
   >
     Next Card
   </button>
+  <div id="review-filters-{{ review_id }}" class="hidden">
+    <input type="hidden" name="kid_id" value="{{ kid_id }}">
+    <input type="hidden" name="deck_id" value="{{ deck_id }}">
+    <input type="hidden" name="hint_mode" value="{{ hint_mode }}">
+    {% if group_texts %}
+      <input type="hidden" name="group_texts" value="1">
+    {% endif %}
+    {% if apply_filters %}
+      <input type="hidden" name="apply_filters" value="1">
+    {% endif %}
+    {% if search_query %}
+      <input type="hidden" name="q" value="{{ search_query }}">
+    {% endif %}
+    {% if selected_tags %}
+      {% for tag in selected_tags %}
+        <input type="hidden" name="tag" value="{{ tag }}">
+      {% endfor %}
+    {% endif %}
+  </div>
+  <div
+    hx-get="/review/next"
+    hx-include="#review-filters-{{ review_id }}"
+    hx-target="#card-container"
+    hx-swap="innerHTML"
+    hx-trigger="load delay:2s"
+    class="hidden"
+  ></div>
 </div>

@@ -20,30 +20,65 @@
         class="space-y-4"
     >
         <input type="hidden" name="started_at" value="{{ started_at }}">
-        <div>
-            <label for="hint_mode" class="block text-sm font-semibold text-gray-700 mb-2">Hint mode</label>
-            <select
-                id="hint_mode"
-                name="hint_mode"
-                class="w-full border border-gray-300 rounded-lg p-2"
-                hx-get="/review/hint?card_id={{ card.id }}"
-                hx-trigger="change"
-                hx-target="#hint-text"
-                hx-swap="innerHTML"
-            >
-                {% for mode_value, mode_label in hint_modes %}
-                    <option value="{{ mode_value }}" {% if hint_mode == mode_value %}selected{% endif %}>{{ mode_label }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div id="hint-text" class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-900 whitespace-pre-wrap">
-            {% if hint_text %}
-                {{ hint_text }}
-            {% else %}
-                No hint is shown for this card.
-            {% endif %}
-        </div>
-        <textarea name="user_text" placeholder="Type what you remember from memory..." class="recall-textarea w-full h-40 p-4" required autocomplete="off"></textarea>
-        <button type="submit" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-8 rounded-lg text-lg transition w-full">I'm Done - Check My Recall!</button>
+        {% if review_mode == "recitation" %}
+            <details class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-900 whitespace-pre-wrap">
+                <summary class="cursor-pointer font-semibold">Reveal</summary>
+                <div class="mt-2">{{ card.full_text }}</div>
+            </details>
+            <input type="hidden" name="user_text" value="">
+            <div>
+                <p class="text-sm font-semibold text-gray-700 mb-2">Parent grade (0–5)</p>
+                <div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                    {% for score in range(0, 6) %}
+                        <button
+                            type="submit"
+                            name="parent_grade"
+                            value="{{ score }}"
+                            class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 rounded-lg transition"
+                        >
+                            {{ score }}
+                        </button>
+                    {% endfor %}
+                </div>
+            </div>
+        {% elif review_mode == "cloze" %}
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-900 whitespace-pre-wrap">
+                {{ masked_text }}
+            </div>
+            <textarea name="user_text" placeholder="Fill in what you remember (optional)..." class="recall-textarea w-full h-32 p-4" autocomplete="off"></textarea>
+            <button type="submit" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-8 rounded-lg text-lg transition w-full">Check My Recall</button>
+        {% elif review_mode == "first_letters" %}
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-900 whitespace-pre-wrap">
+                {{ initials_text }}
+            </div>
+            <input type="text" name="user_text" placeholder="Short recall (optional)..." class="recall-textarea w-full p-3" autocomplete="off">
+            <button type="submit" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-8 rounded-lg text-lg transition w-full">Check My Recall</button>
+        {% else %}
+            <div>
+                <label for="hint_mode" class="block text-sm font-semibold text-gray-700 mb-2">Hint mode</label>
+                <select
+                    id="hint_mode"
+                    name="hint_mode"
+                    class="w-full border border-gray-300 rounded-lg p-2"
+                    hx-get="/review/hint?card_id={{ card.id }}"
+                    hx-trigger="change"
+                    hx-target="#hint-text"
+                    hx-swap="innerHTML"
+                >
+                    {% for mode_value, mode_label in hint_modes %}
+                        <option value="{{ mode_value }}" {% if hint_mode == mode_value %}selected{% endif %}>{{ mode_label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div id="hint-text" class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-900 whitespace-pre-wrap">
+                {% if hint_text %}
+                    {{ hint_text }}
+                {% else %}
+                    No hint is shown for this card.
+                {% endif %}
+            </div>
+            <textarea name="user_text" placeholder="Type what you remember from memory..." class="recall-textarea w-full h-40 p-4" required autocomplete="off"></textarea>
+            <button type="submit" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-8 rounded-lg text-lg transition w-full">I'm Done - Check My Recall!</button>
+        {% endif %}
     </form>
 </div>

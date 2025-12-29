@@ -9,6 +9,23 @@
                 {% endfor %}
             </div>
         {% endif %}
+        <form
+            class="flex flex-wrap gap-2 text-xs"
+            hx-post="/decks/{{ deck_id }}/cards/{{ card.id }}/tags"
+            hx-target="#card-{{ card.id }}"
+            hx-swap="outerHTML"
+        >
+            <label for="card-tags-{{ card.id }}" class="sr-only">Tags</label>
+            <input
+                id="card-tags-{{ card.id }}"
+                name="tags"
+                type="text"
+                value="{{ card.tags | join(', ') }}"
+                placeholder="tag1, tag2"
+                class="border border-gray-300 rounded px-2 py-1 text-xs w-48"
+            >
+            <button type="submit" class="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600">Save tags</button>
+        </form>
     </div>
     <div class="flex flex-wrap items-center gap-2">
         <span class="text-xs font-semibold uppercase tracking-wide px-2 py-1 rounded

@@ -16,7 +16,7 @@ from utils.mastery import mastery_status_from_rules, get_deck_mastery_rules
 from config import load_config
 from utils.auth import require_parent_session
 import sqlite3
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 from datetime import datetime, timezone
 
 router = APIRouter()
@@ -35,63 +35,74 @@ def get_deck_review_mode(conn, deck_id: int) -> str:
         raise HTTPException(status_code=404, detail="Deck not found")
     return row[0] or "free_recall"
 
-def get_next_card_for_review(kid_id: int, deck_id: int, conn, group_texts: bool = False) -> Optional[Dict]:
+def get_next_card_for_review(
+    kid_id: int,
+    deck_id: int,
+    conn,
+    group_texts: bool = False,
+    search_query: Optional[str] = None,
+    tag_filters: Optional[List[str]] = None,
+) -> Optional[Dict]:
     """Get next due card for kid and deck (simple: due and not reviewed today)."""
     cursor = conn.cursor()
-    if group_texts:
-        cursor.execute(
-            """
-            SELECT
-                c.*,
-                t.title AS text_title,
-                (
-                    SELECT COUNT(*) FROM cards c2 WHERE c2.text_id = c.text_id
-                ) AS text_total,
-                (
-                    SELECT GROUP_CONCAT(t2.name, ',')
-                    FROM card_tags ct2
-                    JOIN tags t2 ON t2.id = ct2.tag_id
-                    WHERE ct2.card_id = c.id
-                ) AS tags
-            FROM cards c
-            LEFT JOIN texts t ON t.id = c.text_id
-            WHERE c.deck_id = ? AND c.due_date <= date('now') AND c.deleted_at IS NULL
-            AND (c.text_id IS NULL OR t.deleted_at IS NULL)
-            AND NOT EXISTS (
-                SELECT 1 FROM reviews r WHERE r.card_id = c.id AND r.kid_id = ? AND date(r.ts) = date('now')
+    filters = [
+        "c.deck_id = ?",
+        "c.due_date <= date('now')",
+        "c.deleted_at IS NULL",
+        "(c.text_id IS NULL OR t.deleted_at IS NULL)",
+        "NOT EXISTS (SELECT 1 FROM reviews r WHERE r.card_id = c.id AND r.kid_id = ? AND date(r.ts) = date('now'))",
+    ]
+    params: List[object] = [deck_id, kid_id]
+    fts_join = ""
+    if search_query:
+        filters.append("cards_fts MATCH ?")
+        params.append(search_query)
+        fts_join = "JOIN cards_fts ON cards_fts.rowid = c.id"
+    if tag_filters:
+        placeholders = ",".join("?" for _ in tag_filters)
+        filters.append(
+            f"""
+            c.id IN (
+                SELECT ct2.card_id
+                FROM card_tags ct2
+                JOIN tags t2 ON t2.id = ct2.tag_id
+                WHERE t2.name IN ({placeholders})
+                GROUP BY ct2.card_id
+                HAVING COUNT(DISTINCT t2.name) = ?
             )
-            ORDER BY c.due_date ASC, (c.text_id IS NULL), c.text_id, c.chunk_index
-            LIMIT 1
-            """,
-            (deck_id, kid_id),
-        )
-    else:
-        cursor.execute(
             """
-            SELECT
-                c.*,
-                t.title AS text_title,
-                (
-                    SELECT COUNT(*) FROM cards c2 WHERE c2.text_id = c.text_id
-                ) AS text_total,
-                (
-                    SELECT GROUP_CONCAT(t2.name, ',')
-                    FROM card_tags ct2
-                    JOIN tags t2 ON t2.id = ct2.tag_id
-                    WHERE ct2.card_id = c.id
-                ) AS tags
-            FROM cards c
-            LEFT JOIN texts t ON t.id = c.text_id
-            WHERE c.deck_id = ? AND c.due_date <= date('now') AND c.deleted_at IS NULL
-            AND (c.text_id IS NULL OR t.deleted_at IS NULL)
-            AND NOT EXISTS (
-                SELECT 1 FROM reviews r WHERE r.card_id = c.id AND r.kid_id = ? AND date(r.ts) = date('now')
-            )
-            ORDER BY c.due_date ASC, random()
-            LIMIT 1
-            """,
-            (deck_id, kid_id),
         )
+        params.extend(tag_filters)
+        params.append(len(tag_filters))
+    where_clause = " AND ".join(filters)
+    order_clause = (
+        "ORDER BY c.due_date ASC, (c.text_id IS NULL), c.text_id, c.chunk_index"
+        if group_texts
+        else "ORDER BY c.due_date ASC, random()"
+    )
+    cursor.execute(
+        f"""
+        SELECT
+            c.*,
+            t.title AS text_title,
+            (
+                SELECT COUNT(*) FROM cards c2 WHERE c2.text_id = c.text_id
+            ) AS text_total,
+            (
+                SELECT GROUP_CONCAT(t2.name, ',')
+                FROM card_tags ct2
+                JOIN tags t2 ON t2.id = ct2.tag_id
+                WHERE ct2.card_id = c.id
+            ) AS tags
+        FROM cards c
+        LEFT JOIN texts t ON t.id = c.text_id
+        {fts_join}
+        WHERE {where_clause}
+        {order_clause}
+        LIMIT 1
+        """,
+        params,
+    )
     row = cursor.fetchone()
     if row:
         card = dict(row)
@@ -127,8 +138,18 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
     deck_tags = [row[0] for row in cursor.fetchall()]
     hint_mode = normalize_hint_mode(request.query_params.get("hint_mode"))
     group_texts = request.query_params.get("group_texts") == "1"
+    apply_filters = request.query_params.get("apply_filters") == "1"
+    search_query = (request.query_params.get("q") or "").strip()
+    selected_tags = [tag for tag in request.query_params.getlist("tag") if tag]
     review_mode = deck["review_mode"]
-    card = get_next_card_for_review(kid_id, deck_id, conn, group_texts=group_texts)
+    card = get_next_card_for_review(
+        kid_id,
+        deck_id,
+        conn,
+        group_texts=group_texts,
+        search_query=search_query if apply_filters else None,
+        tag_filters=selected_tags if apply_filters else None,
+    )
     hint_text = build_hint_text(card["full_text"], hint_mode) if card and review_mode == "free_recall" else ""
     masked_text = build_cloze_text(card["full_text"]) if card and review_mode == "cloze" else ""
     initials_text = build_first_letters_text(card["full_text"]) if card and review_mode == "first_letters" else ""
@@ -150,6 +171,9 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
             "review_mode": review_mode,
             "masked_text": masked_text,
             "initials_text": initials_text,
+            "apply_filters": apply_filters,
+            "search_query": search_query,
+            "selected_tags": selected_tags,
         },
     )
 
@@ -158,8 +182,18 @@ async def next_card(kid_id: int, deck_id: int, request: Request, conn = Depends(
     """HTMX endpoint for next card partial."""
     hint_mode = normalize_hint_mode(request.query_params.get("hint_mode"))
     group_texts = request.query_params.get("group_texts") == "1"
+    apply_filters = request.query_params.get("apply_filters") == "1"
+    search_query = (request.query_params.get("q") or "").strip()
+    selected_tags = [tag for tag in request.query_params.getlist("tag") if tag]
     review_mode = get_deck_review_mode(conn, deck_id)
-    card = get_next_card_for_review(kid_id, deck_id, conn, group_texts=group_texts)
+    card = get_next_card_for_review(
+        kid_id,
+        deck_id,
+        conn,
+        group_texts=group_texts,
+        search_query=search_query if apply_filters else None,
+        tag_filters=selected_tags if apply_filters else None,
+    )
     if card:
         return templates.TemplateResponse(
             "partials/card.html",
@@ -176,6 +210,9 @@ async def next_card(kid_id: int, deck_id: int, request: Request, conn = Depends(
                 "review_mode": review_mode,
                 "masked_text": build_cloze_text(card["full_text"]) if review_mode == "cloze" else "",
                 "initials_text": build_first_letters_text(card["full_text"]) if review_mode == "first_letters" else "",
+                "apply_filters": apply_filters,
+                "search_query": search_query,
+                "selected_tags": selected_tags,
             },
         )
     else:
@@ -209,6 +246,9 @@ async def submit_review(
     parent_grade: Optional[str] = Form(None),
     group_texts: str = Form("0"),
     started_at: Optional[str] = Form(None),
+    apply_filters: str = Form("0"),
+    q: Optional[str] = Form(None),
+    tag: List[str] = Form([]),
     conn = Depends(get_db),
 ):
     """HTMX endpoint to grade recall, update card/review, return result partial."""
@@ -324,6 +364,9 @@ async def submit_review(
             "hint_mode": hint_mode,
             "group_texts": group_texts == "1",
             "review_id": review_id,
+            "apply_filters": apply_filters == "1",
+            "search_query": (q or "").strip(),
+            "selected_tags": [t for t in tag if t],
         },
     )
 
@@ -333,6 +376,9 @@ async def override_review_grade(
     review_id: int = Form(...),
     grade: str = Form(...),
     group_texts: str = Form("0"),
+    apply_filters: str = Form("0"),
+    q: Optional[str] = Form(None),
+    tag: List[str] = Form([]),
     conn = Depends(get_db),
 ):
     """HTMX endpoint to override auto-grade with parent input."""
@@ -383,5 +429,8 @@ async def override_review_grade(
             "hint_mode": row["hint_mode"],
             "group_texts": group_texts == "1",
             "review_id": review_id,
+            "apply_filters": apply_filters == "1",
+            "search_query": (q or "").strip(),
+            "selected_tags": [t for t in tag if t],
         },
     )

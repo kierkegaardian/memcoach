@@ -16,6 +16,34 @@
         {% endif %}
     </div>
 
+    <div class="bg-white p-4 rounded shadow space-y-3">
+        <div class="flex items-center justify-between">
+            <h3 class="text-xl font-semibold">Deck tags</h3>
+        </div>
+        <form method="post" action="/decks/{{ deck.id }}/tags" class="flex flex-col gap-3 sm:flex-row sm:items-center">
+            {% if kid_id %}
+                <input type="hidden" name="kid_id" value="{{ kid_id }}">
+            {% endif %}
+            <input
+                type="text"
+                name="tags"
+                value="{{ deck_tags_text }}"
+                placeholder="tag1, tag2"
+                class="flex-1 border border-gray-300 rounded px-3 py-2"
+            >
+            <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Save tags</button>
+        </form>
+        {% if deck_tags %}
+            <div class="flex flex-wrap gap-2">
+                {% for tag in deck_tags %}
+                    <span class="text-xs font-semibold uppercase tracking-wide px-2 py-1 rounded bg-slate-100 text-slate-700">{{ tag }}</span>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-sm text-gray-500">Add tags to make this deck easier to find.</p>
+        {% endif %}
+    </div>
+
     <div class="bg-white p-4 rounded shadow">
         <div class="flex items-center justify-between mb-2">
             <p class="text-sm text-gray-500">Mastery Progress</p>
@@ -50,9 +78,9 @@
                     placeholder="Search cards..."
                     class="w-full border border-gray-300 rounded px-3 py-2"
                 >
-                {% if deck_tags %}
+                {% if card_tags %}
                     <div class="flex flex-wrap gap-3">
-                        {% for tag in deck_tags %}
+                        {% for tag in card_tags %}
                             <label class="flex items-center gap-2 text-sm text-gray-700">
                                 <input type="checkbox" name="tag" value="{{ tag }}" class="rounded border-gray-300">
                                 <span>{{ tag }}</span>

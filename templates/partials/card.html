@@ -16,6 +16,17 @@
         {% if group_texts %}
             <input type="hidden" name="group_texts" value="1">
         {% endif %}
+        {% if apply_filters %}
+            <input type="hidden" name="apply_filters" value="1">
+        {% endif %}
+        {% if search_query %}
+            <input type="hidden" name="q" value="{{ search_query }}">
+        {% endif %}
+        {% if selected_tags %}
+            {% for tag in selected_tags %}
+                <input type="hidden" name="tag" value="{{ tag }}">
+            {% endfor %}
+        {% endif %}
         {% if review_mode == "recitation" %}
             <details class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-900 whitespace-pre-wrap">
                 <summary class="cursor-pointer font-semibold">Reveal</summary>

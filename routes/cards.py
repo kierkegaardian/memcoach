@@ -8,6 +8,7 @@ import sqlite3
 from typing import Optional, List
 import re
 from utils.auth import require_parent_session
+from utils.tags import parse_tag_names, set_card_tags
 
 router = APIRouter(dependencies=[Depends(require_parent_session)])
 base_dir = Path(__file__).resolve().parent.parent
@@ -65,9 +66,9 @@ def split_long_text(text: str, strategy: str, delimiter: Optional[str]) -> List[
     if not cleaned:
         return []
     if strategy == "sentences":
-        parts = re.split(r"(?<=[.!?])\\s+", cleaned)
+        parts = re.split(r"(?<=[.!?])\s+", cleaned)
     elif strategy == "stanzas":
-        parts = re.split(r"\\n\\s*\\n+", cleaned)
+        parts = re.split(r"\n\s*\n+", cleaned)
     elif strategy == "custom":
         if not delimiter:
             return []
@@ -142,9 +143,12 @@ async def add_cards(
                 raise HTTPException(status_code=400, detail="File must be .txt")
             content = await file.read()
             text = content.decode('utf-8', errors='ignore')
-            blocks = [b.strip() for b in text.split('\n\n') if b.strip()]
+            blocks = [b.strip() for b in re.split(r"\r?\n\s*\r?\n+", text) if b.strip()]
+            prompt_base_clean = (prompt_base or "").strip()
+            if not prompt_base_clean:
+                prompt_base_clean = "Recite:"
             for i, block in enumerate(blocks, 1):
-                p = f"{prompt_base}{i}: " if len(blocks) > 1 else prompt_base
+                p = f"{prompt_base_clean} {i}".strip() if len(blocks) > 1 else prompt_base_clean
                 f_text = block
                 cursor.execute("""
                     INSERT INTO cards (deck_id, prompt, full_text, interval_days, due_date, ease_factor, streak, mastery_status, position)
@@ -174,6 +178,56 @@ async def add_cards(
 @router.get("/{deck_id}/cards/{card_id}/row", response_class=HTMLResponse)
 async def card_row(deck_id: int, card_id: int, request: Request, conn = Depends(get_db)):
     cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT
+            c.id,
+            c.prompt,
+            c.mastery_status,
+            c.streak,
+            c.due_date,
+            c.position,
+            GROUP_CONCAT(t.name, ',') AS tags
+        FROM cards c
+        LEFT JOIN card_tags ct ON ct.card_id = c.id
+        LEFT JOIN tags t ON t.id = ct.tag_id
+        WHERE c.id = ? AND c.deck_id = ? AND c.deleted_at IS NULL
+        GROUP BY c.id
+        """,
+        (card_id, deck_id),
+    )
+    card = cursor.fetchone()
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found")
+    flags = get_card_position_flags(cursor, deck_id, card["position"])
+    return templates.TemplateResponse(
+        "cards/card_row.html",
+        {
+            "request": request,
+            "card": {**dict(card), "tags": [tag for tag in (card["tags"] or "").split(",") if tag]},
+            "deck_id": deck_id,
+            **flags,
+        },
+    )
+
+@router.post("/{deck_id}/cards/{card_id}/tags", response_class=HTMLResponse)
+async def update_card_tags(
+    deck_id: int,
+    card_id: int,
+    request: Request,
+    tags: str = Form(""),
+    conn = Depends(get_db),
+):
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id FROM cards WHERE id = ? AND deck_id = ? AND deleted_at IS NULL",
+        (card_id, deck_id),
+    )
+    if not cursor.fetchone():
+        raise HTTPException(status_code=404, detail="Card not found")
+    tag_names = parse_tag_names(tags)
+    set_card_tags(conn, card_id, tag_names)
+    conn.commit()
     cursor.execute(
         """
         SELECT

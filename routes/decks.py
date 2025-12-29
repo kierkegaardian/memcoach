@@ -8,6 +8,7 @@ import sqlite3
 from utils.mastery import mastery_percent
 from utils.auth import require_parent_session
 from typing import Optional
+from utils.tags import parse_tag_names, set_deck_tags
 
 router = APIRouter(dependencies=[Depends(require_parent_session)])
 base_dir = Path(__file__).resolve().parent.parent
@@ -107,6 +108,18 @@ async def deck_detail(deck_id: int, request: Request, kid_id: Optional[int] = No
     if not deck_row:
         raise HTTPException(status_code=404, detail="Deck not found")
     deck = {"id": deck_row[0], "name": deck_row[1]}
+    cursor.execute(
+        """
+        SELECT t.name
+        FROM deck_tags dt
+        JOIN tags t ON t.id = dt.tag_id
+        WHERE dt.deck_id = ?
+        ORDER BY t.name
+        """,
+        (deck_id,),
+    )
+    deck_tag_names = [row[0] for row in cursor.fetchall()]
+    deck_tags_text = ", ".join(deck_tag_names)
     cursor.execute("""
         SELECT
             c.id,
@@ -139,7 +152,7 @@ async def deck_detail(deck_id: int, request: Request, kid_id: Optional[int] = No
         """,
         (deck_id,),
     )
-    deck_tags = [row[0] for row in cursor.fetchall()]
+    card_tags = [row[0] for row in cursor.fetchall()]
     mastered = sum(1 for card in cards if card["mastery_status"] == "mastered")
     total = len(cards)
     percent_mastered = mastery_percent(mastered, total)
@@ -153,7 +166,9 @@ async def deck_detail(deck_id: int, request: Request, kid_id: Optional[int] = No
             "mastered_count": mastered,
             "total_cards": total,
             "kid_id": kid_id,
-            "deck_tags": deck_tags,
+            "deck_tags": deck_tag_names,
+            "deck_tags_text": deck_tags_text,
+            "card_tags": card_tags,
         },
     )
 
@@ -213,3 +228,20 @@ async def delete_deck(deck_id: int, conn = Depends(get_db)):
     )
     conn.commit()
     return HTMLResponse("")
+
+@router.post("/{deck_id}/tags")
+async def update_deck_tags(
+    deck_id: int,
+    tags: str = Form(""),
+    kid_id: Optional[int] = Form(None),
+    conn = Depends(get_db),
+):
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM decks WHERE id = ? AND deleted_at IS NULL", (deck_id,))
+    if not cursor.fetchone():
+        raise HTTPException(status_code=404, detail="Deck not found")
+    tag_names = parse_tag_names(tags)
+    set_deck_tags(conn, deck_id, tag_names)
+    conn.commit()
+    redirect_target = f"/decks/{deck_id}?kid_id={kid_id}" if kid_id else f"/decks/{deck_id}"
+    return RedirectResponse(url=redirect_target, status_code=status.HTTP_303_SEE_OTHER)

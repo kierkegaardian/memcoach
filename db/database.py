@@ -25,6 +25,7 @@ def init_db():
         ensure_card_position(conn)
         ensure_cards_fts(conn)
         ensure_review_duration(conn)
+        ensure_review_hint_mode(conn)
         ensure_deck_review_mode(conn)
         ensure_review_review_mode(conn)
         ensure_review_grading_fields(conn)
@@ -93,6 +94,16 @@ def ensure_review_duration(conn: sqlite3.Connection) -> None:
     columns = {row[1] for row in cursor.fetchall()}
     if "duration_seconds" not in columns:
         cursor.execute("ALTER TABLE reviews ADD COLUMN duration_seconds INTEGER")
+
+def ensure_review_hint_mode(conn: sqlite3.Connection) -> None:
+    """Ensure reviews table has hint_mode column."""
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(reviews)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if "hint_mode" not in columns:
+        cursor.execute(
+            "ALTER TABLE reviews ADD COLUMN hint_mode TEXT NOT NULL DEFAULT 'none'"
+        )
 
 def ensure_deck_review_mode(conn: sqlite3.Connection) -> None:
     """Ensure decks table has review_mode column."""
@@ -247,6 +258,7 @@ def get_conn():
     """Context manager for SQLite connection, using row_factory for dict-like rows."""
     conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     try:
         yield conn
     finally:

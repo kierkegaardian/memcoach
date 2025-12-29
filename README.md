@@ -116,7 +116,7 @@ use_llm_on_borderline = true
 | /kids/new | Add new kid | GET/POST |
 | /kids/{kid_id}/decks | List decks for a kid | GET |
 | /decks/new | Create new deck | GET/POST |
-| /decks/{deck_id}/cards/add | Add card(s) manually or via file upload | GET/POST |
+| /decks/{deck_id}/add | Add card(s) manually or via file upload | GET/POST |
 | /review/{kid_id}/{deck_id} | Start interactive review session (HTMX-powered) | GET + HTMX |
 | /review/next | HTMX: Get next due card | GET |
 | /review/submit | HTMX: Submit recall attempt → grade → schedule | POST |

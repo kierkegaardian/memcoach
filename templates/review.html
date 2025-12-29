@@ -45,30 +45,54 @@
             <p class="text-sm font-semibold text-gray-700">Filter today's cards</p>
             <p class="text-xs text-gray-500">Search prompt/full text or narrow by tags.</p>
         </div>
-        <form
-            class="space-y-3"
-            hx-get="/search"
-            hx-target="#today-search-results"
-            hx-trigger="keyup changed delay:300ms, change"
-        >
+        <form method="get" action="/review/{{ kid_id }}/{{ deck_id }}" class="space-y-3">
             <input type="hidden" name="deck_id" value="{{ deck_id }}">
+            <input type="hidden" name="kid_id" value="{{ kid_id }}">
             <input type="hidden" name="due_today" value="1">
+            <input type="hidden" name="apply_filters" value="1">
+            {% if group_texts %}
+                <input type="hidden" name="group_texts" value="1">
+            {% endif %}
             <input
                 type="text"
                 name="q"
                 placeholder="Search today's cards..."
                 class="w-full border border-gray-300 rounded px-3 py-2"
+                value="{{ search_query }}"
+                hx-get="/search"
+                hx-target="#today-search-results"
+                hx-trigger="keyup changed delay:300ms"
+                hx-include="closest form"
             >
             {% if deck_tags %}
                 <div class="flex flex-wrap gap-3">
                     {% for tag in deck_tags %}
                         <label class="flex items-center gap-2 text-sm text-gray-700">
-                            <input type="checkbox" name="tag" value="{{ tag }}" class="rounded border-gray-300">
+                            <input
+                                type="checkbox"
+                                name="tag"
+                                value="{{ tag }}"
+                                class="rounded border-gray-300"
+                                {% if tag in selected_tags %}checked{% endif %}
+                                hx-get="/search"
+                                hx-target="#today-search-results"
+                                hx-trigger="change"
+                                hx-include="closest form"
+                            >
                             <span>{{ tag }}</span>
                         </label>
                     {% endfor %}
                 </div>
             {% endif %}
+            <div class="flex flex-wrap items-center gap-3 text-sm">
+                <button type="submit" class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">Apply filters to session</button>
+                {% if apply_filters or search_query or selected_tags %}
+                    <a href="/review/{{ kid_id }}/{{ deck_id }}{% if group_texts %}?group_texts=1{% endif %}" class="text-blue-600 hover:underline">Clear</a>
+                {% endif %}
+                {% if apply_filters %}
+                    <span class="text-xs uppercase tracking-wide text-green-600">Filters active</span>
+                {% endif %}
+            </div>
         </form>
         <div id="today-search-results" class="text-sm text-gray-600">
             <p class="text-sm text-gray-500">Start typing or select tags to filter.</p>

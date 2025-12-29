@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}MemCoach - Local-First Memorization{% endblock %}</title>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="{{ url_for('static', path='vendor/htmx.min.js') }}"></script>
+    <script src="{{ url_for('static', path='vendor/tailwindcss.js') }}"></script>
     <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
     {% block extra_head %}{% endblock %}
 </head>

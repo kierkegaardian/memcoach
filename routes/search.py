@@ -15,6 +15,7 @@ async def search_cards(
     request: Request,
     q: Optional[str] = None,
     deck_id: Optional[int] = None,
+    kid_id: Optional[int] = None,
     tag: List[str] = Query(default=[]),
     due_today: bool = False,
     conn = Depends(get_db),
@@ -29,6 +30,18 @@ async def search_cards(
 
     if due_today:
         filters.append("c.due_date <= date('now')")
+        if kid_id is not None:
+            filters.append(
+                """
+                NOT EXISTS (
+                    SELECT 1 FROM reviews r
+                    WHERE r.card_id = c.id
+                    AND r.kid_id = ?
+                    AND date(r.ts) = date('now')
+                )
+                """
+            )
+            params.append(kid_id)
 
     if q:
         filters.append("cards_fts MATCH ?")
