@@ -140,6 +140,24 @@ use_llm_on_borderline = true
 - Show result with color (green/orange/red) + correct text
 - Auto-load next card via HTMX (no page refresh)
 
+## Local Speech-to-Text Fallback
+
+If browser voice input fails, use the **Record & transcribe** button. This sends audio to `/stt` and runs Whisper locally.
+
+Requirements:
+- `ffmpeg` installed on the host
+- `faster-whisper` Python package (included in `requirements.txt`)
+
+Optional config:
+```toml
+[stt]
+provider = "auto"
+model = "base"
+language = "en"
+device = "cpu"
+compute_type = "int8"
+```
+
 ## SM-2 Implementation (in utils/sm2.py)
 
 - Grade mapping: perfect→4, good→3, fail→0

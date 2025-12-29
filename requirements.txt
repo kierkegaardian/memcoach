@@ -7,3 +7,4 @@ python-dotenv
 tomli  # Fallback for older Python if needed, but 3.11 has tomllib
 pytest
 httpx
+faster-whisper

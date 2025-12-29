@@ -144,6 +144,13 @@
         let finalTranscript = '';
         let shouldListen = false;
         let restartTimer = null;
+        let activeLocalButton = null;
+        let activeLocalStatus = null;
+        let activeLocalInput = null;
+        let activeLocalPreview = null;
+        let localRecorder = null;
+        let localStream = null;
+        let localChunks = [];
 
         const setStatus = (message) => {
             if (activeStatus) {
@@ -163,12 +170,34 @@
             }
         };
 
+        const setLocalStatus = (message) => {
+            if (activeLocalStatus) {
+                activeLocalStatus.textContent = message;
+            }
+        };
+
+        const setLocalButtonLabel = (label) => {
+            if (activeLocalButton) {
+                activeLocalButton.textContent = label;
+            }
+        };
+
         const resetState = () => {
             activeButton = null;
             activeStatus = null;
             activeInput = null;
             activePreview = null;
             finalTranscript = '';
+        };
+
+        const resetLocalState = () => {
+            activeLocalButton = null;
+            activeLocalStatus = null;
+            activeLocalInput = null;
+            activeLocalPreview = null;
+            localRecorder = null;
+            localStream = null;
+            localChunks = [];
         };
 
         const clearRestart = () => {
@@ -203,6 +232,38 @@
                 recognizer.stop();
             } catch (err) {
                 // Ignore stop errors when recognition is already ending.
+            }
+        };
+
+        const getSupportedMimeType = () => {
+            const candidates = [
+                'audio/webm;codecs=opus',
+                'audio/webm',
+                'audio/ogg;codecs=opus',
+            ];
+            for (const candidate of candidates) {
+                if (window.MediaRecorder && MediaRecorder.isTypeSupported(candidate)) {
+                    return candidate;
+                }
+            }
+            return '';
+        };
+
+        const cleanupLocalStream = () => {
+            if (localStream) {
+                localStream.getTracks().forEach((track) => track.stop());
+            }
+            localStream = null;
+        };
+
+        const stopLocalRecording = () => {
+            if (!localRecorder) {
+                return;
+            }
+            try {
+                localRecorder.stop();
+            } catch (err) {
+                // Ignore stop errors if recorder already stopped.
             }
         };
 
@@ -274,6 +335,7 @@
             if (activeButton) {
                 stopRecognizer();
                 setStatus('Voice input stopped.');
+                setPreview('');
                 setButtonLabel('🎙️ Start voice input');
                 resetState();
                 return;
@@ -299,6 +361,119 @@
             setStatus('Starting mic...');
             setPreview('');
             startRecognizer();
+        });
+
+        document.addEventListener('click', async (event) => {
+            const button = event.target.closest('.voice-local-btn');
+            if (!button) {
+                return;
+            }
+            event.preventDefault();
+
+            if (activeLocalButton && !document.body.contains(activeLocalButton)) {
+                stopLocalRecording();
+                cleanupLocalStream();
+                resetLocalState();
+            }
+
+            if (activeLocalButton) {
+                setLocalStatus('Transcribing locally...');
+                setLocalButtonLabel('🎧 Record & transcribe');
+                stopLocalRecording();
+                return;
+            }
+
+            const container = button.closest('form') || document;
+            const targetName = button.dataset.voiceTarget;
+            const input = container.querySelector(`[name="${targetName}"]`);
+            const status = button.parentElement.querySelector('.voice-local-status');
+            const preview = button.parentElement.querySelector('.voice-preview');
+
+            if (!input) {
+                return;
+            }
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                if (status) {
+                    status.textContent = 'Local recording not supported in this browser.';
+                }
+                return;
+            }
+
+            if (activeButton) {
+                stopRecognizer();
+                resetState();
+            }
+
+            activeLocalButton = button;
+            activeLocalStatus = status;
+            activeLocalInput = input;
+            activeLocalPreview = preview;
+            localChunks = [];
+
+            setLocalStatus('Starting local recorder...');
+            setLocalButtonLabel('⏹ Stop & transcribe');
+            if (activeLocalPreview) {
+                activeLocalPreview.textContent = '';
+            }
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const mimeType = getSupportedMimeType();
+                localRecorder = mimeType
+                    ? new MediaRecorder(localStream, { mimeType })
+                    : new MediaRecorder(localStream);
+            } catch (err) {
+                setLocalStatus('Microphone access denied.');
+                setLocalButtonLabel('🎧 Record & transcribe');
+                cleanupLocalStream();
+                resetLocalState();
+                return;
+            }
+
+            localRecorder.ondataavailable = (evt) => {
+                if (evt.data && evt.data.size > 0) {
+                    localChunks.push(evt.data);
+                }
+            };
+
+            localRecorder.onstop = async () => {
+                cleanupLocalStream();
+                const blobType = localRecorder.mimeType || 'audio/webm';
+                const blob = new Blob(localChunks, { type: blobType });
+                const ext = blobType.includes('ogg') ? 'ogg' : 'webm';
+                const formData = new FormData();
+                formData.append('audio', blob, `recording.${ext}`);
+                setLocalStatus('Transcribing locally...');
+                try {
+                    const response = await fetch('/stt', {
+                        method: 'POST',
+                        body: formData,
+                    });
+                    const payload = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        setLocalStatus(payload.detail || 'Transcription failed.');
+                        setLocalButtonLabel('🎧 Record & transcribe');
+                        resetLocalState();
+                        return;
+                    }
+                    const text = (payload.text || '').trim();
+                    if (activeLocalInput) {
+                        activeLocalInput.value = text;
+                    }
+                    if (activeLocalPreview) {
+                        activeLocalPreview.textContent = text ? `Heard: ${text}` : '';
+                    }
+                    setLocalStatus(text ? 'Local transcript ready.' : 'No speech detected.');
+                } catch (err) {
+                    setLocalStatus('Transcription failed.');
+                }
+                setLocalButtonLabel('🎧 Record & transcribe');
+                resetLocalState();
+            };
+
+            localRecorder.start();
+            setLocalStatus('Recording... Tap stop when done.');
         });
     })();
 </script>

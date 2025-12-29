@@ -49,6 +49,14 @@ def load_config() -> Dict[str, Any]:
             str(grading_cfg.get("use_llm_on_borderline", legacy_grading.get("use_llm_on_borderline", True)))
         ).lower() == "true",
     }
+    stt_cfg = config.get("stt", {})
+    config["stt"] = {
+        "provider": os.getenv("STT_PROVIDER", stt_cfg.get("provider", "auto")),
+        "model": os.getenv("STT_MODEL", stt_cfg.get("model", "base")),
+        "language": os.getenv("STT_LANGUAGE", stt_cfg.get("language", "en")),
+        "device": os.getenv("STT_DEVICE", stt_cfg.get("device", "cpu")),
+        "compute_type": os.getenv("STT_COMPUTE_TYPE", stt_cfg.get("compute_type", "int8")),
+    }
     return config
 
 def get_config_value(section: str, key: str, default: Optional[Any] = None) -> Any:
