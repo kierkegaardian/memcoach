@@ -132,12 +132,14 @@
         const recognizer = new SpeechRecognition();
         recognizer.lang = 'en-US';
         recognizer.interimResults = true;
-        recognizer.continuous = false;
+        recognizer.continuous = true;
 
         let activeButton = null;
         let activeStatus = null;
         let activeInput = null;
         let finalTranscript = '';
+        let shouldListen = false;
+        let restartTimer = null;
 
         const setStatus = (message) => {
             if (activeStatus) {
@@ -156,6 +158,41 @@
             activeStatus = null;
             activeInput = null;
             finalTranscript = '';
+        };
+
+        const clearRestart = () => {
+            if (restartTimer) {
+                window.clearTimeout(restartTimer);
+                restartTimer = null;
+            }
+        };
+
+        const startRecognizer = () => {
+            clearRestart();
+            if (!shouldListen) {
+                return;
+            }
+            try {
+                recognizer.start();
+            } catch (err) {
+                if (err && err.name === 'InvalidStateError') {
+                    return;
+                }
+                setStatus(`Voice input error: ${err?.message || err}`);
+                setButtonLabel('🎙️ Start voice input');
+                shouldListen = false;
+                resetState();
+            }
+        };
+
+        const stopRecognizer = () => {
+            shouldListen = false;
+            clearRestart();
+            try {
+                recognizer.stop();
+            } catch (err) {
+                // Ignore stop errors when recognition is already ending.
+            }
         };
 
         recognizer.onstart = () => {
@@ -180,11 +217,22 @@
         };
 
         recognizer.onerror = (event) => {
+            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                setStatus('Microphone access denied.');
+                setButtonLabel('🎙️ Start voice input');
+                stopRecognizer();
+                resetState();
+                return;
+            }
             setStatus(`Voice input error: ${event.error}`);
-            setButtonLabel('🎙️ Start voice input');
         };
 
         recognizer.onend = () => {
+            if (shouldListen) {
+                setStatus('Listening...');
+                restartTimer = window.setTimeout(startRecognizer, 250);
+                return;
+            }
             setStatus(finalTranscript ? 'Transcription ready.' : 'Voice input stopped.');
             setButtonLabel('🎙️ Start voice input');
             resetState();
@@ -197,8 +245,16 @@
             }
             event.preventDefault();
 
+            if (activeButton && !document.body.contains(activeButton)) {
+                stopRecognizer();
+                resetState();
+            }
+
             if (activeButton) {
-                recognizer.stop();
+                stopRecognizer();
+                setStatus('Voice input stopped.');
+                setButtonLabel('🎙️ Start voice input');
+                resetState();
                 return;
             }
 
@@ -215,9 +271,10 @@
             activeStatus = status;
             activeInput = input;
             finalTranscript = input.value ? input.value + ' ' : '';
+            shouldListen = true;
 
             setStatus('Starting mic...');
-            recognizer.start();
+            startRecognizer();
         });
     })();
 </script>
