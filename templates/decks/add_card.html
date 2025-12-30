@@ -23,6 +23,43 @@
             </div>
         </fieldset>
         <fieldset class="border p-4 rounded">
+            <legend class="text-lg font-medium mb-2">Source: Bible (KJV)</legend>
+            <div class="space-y-4">
+                <p class="text-sm text-gray-600">Choose a passage to autofill the card fields below.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="bible_book" class="block text-sm font-medium text-gray-700 mb-1">Book</label>
+                        <select id="bible_book" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></select>
+                    </div>
+                    <div>
+                        <label for="bible_chapter" class="block text-sm font-medium text-gray-700 mb-1">Chapter</label>
+                        <select id="bible_chapter" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></select>
+                    </div>
+                    <div>
+                        <label for="bible_start_verse" class="block text-sm font-medium text-gray-700 mb-1">Start Verse</label>
+                        <select id="bible_start_verse" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></select>
+                    </div>
+                    <div>
+                        <label for="bible_end_verse" class="block text-sm font-medium text-gray-700 mb-1">End Verse</label>
+                        <select id="bible_end_verse" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                    <div>
+                        <label for="bible_card_mode" class="block text-sm font-medium text-gray-700 mb-1">Create Cards As</label>
+                        <select id="bible_card_mode" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
+                            <option value="single">Single Card (full passage)</option>
+                            <option value="long">Long Text (auto-chunk by verse)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <button type="button" id="bible_fetch" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-2 px-6 rounded-md transition">Load Passage</button>
+                    </div>
+                </div>
+                <p id="bible_status" class="text-sm text-gray-500"></p>
+            </div>
+        </fieldset>
+        <fieldset class="border p-4 rounded">
             <legend class="text-lg font-medium mb-2">Long Text (Auto-Chunked)</legend>
             <div class="space-y-4">
                 <div>
@@ -70,4 +107,108 @@
         </div>
     </form>
 </div>
+<script>
+    const bibleIndex = {{ bible_index | tojson }};
+    const bookSelect = document.getElementById("bible_book");
+    const chapterSelect = document.getElementById("bible_chapter");
+    const startVerseSelect = document.getElementById("bible_start_verse");
+    const endVerseSelect = document.getElementById("bible_end_verse");
+    const modeSelect = document.getElementById("bible_card_mode");
+    const fetchButton = document.getElementById("bible_fetch");
+    const statusLine = document.getElementById("bible_status");
+
+    const promptInput = document.getElementById("prompt");
+    const fullTextInput = document.getElementById("full_text");
+    const longTitleInput = document.getElementById("long_text_title");
+    const longBodyInput = document.getElementById("long_text_body");
+    const chunkStrategySelect = document.getElementById("chunk_strategy");
+
+    const chapterOptionsForBook = (book) => Object.keys(bibleIndex.chapters[book] || {}).map(Number).sort((a, b) => a - b);
+    const maxVerseFor = (book, chapter) => bibleIndex.chapters[book]?.[chapter] || 1;
+
+    const setOptions = (select, values, selectedValue) => {
+        select.innerHTML = "";
+        values.forEach((value) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = value;
+            if (String(value) === String(selectedValue)) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+    };
+
+    const updateChapters = () => {
+        const book = bookSelect.value;
+        const chapters = chapterOptionsForBook(book);
+        const currentChapter = chapterSelect.value || chapters[0];
+        setOptions(chapterSelect, chapters, currentChapter);
+        updateVerses();
+    };
+
+    const updateVerses = () => {
+        const book = bookSelect.value;
+        const chapter = Number(chapterSelect.value);
+        const maxVerse = maxVerseFor(book, chapter);
+        const startValue = Number(startVerseSelect.value || 1);
+        const endValue = Number(endVerseSelect.value || startValue);
+        setOptions(startVerseSelect, Array.from({ length: maxVerse }, (_, i) => i + 1), startValue);
+        const startVerse = Number(startVerseSelect.value);
+        setOptions(endVerseSelect, Array.from({ length: maxVerse - startVerse + 1 }, (_, i) => i + startVerse), Math.max(endValue, startVerse));
+    };
+
+    const referenceText = (book, chapter, startVerse, endVerse) => {
+        if (startVerse === endVerse) {
+            return `${book} ${chapter}:${startVerse}`;
+        }
+        return `${book} ${chapter}:${startVerse}\u2013${endVerse}`;
+    };
+
+    const populateBooks = () => {
+        setOptions(bookSelect, bibleIndex.books, bibleIndex.books[0]);
+        updateChapters();
+    };
+
+    bookSelect.addEventListener("change", updateChapters);
+    chapterSelect.addEventListener("change", updateVerses);
+    startVerseSelect.addEventListener("change", updateVerses);
+
+    fetchButton.addEventListener("click", async () => {
+        const book = bookSelect.value;
+        const chapter = chapterSelect.value;
+        const startVerse = startVerseSelect.value;
+        const endVerse = endVerseSelect.value;
+        const mode = modeSelect.value;
+        statusLine.textContent = "Loading passage...";
+        try {
+            const params = new URLSearchParams({
+                translation: "KJV",
+                book,
+                chapter,
+                start_verse: startVerse,
+                end_verse: endVerse,
+            });
+            const response = await fetch(`/bible/passage?${params.toString()}`);
+            if (!response.ok) {
+                throw new Error("Could not load passage.");
+            }
+            const payload = await response.json();
+            const reference = referenceText(book, Number(chapter), Number(startVerse), Number(endVerse));
+            if (mode === "single") {
+                promptInput.value = `Recite ${reference}`;
+                fullTextInput.value = payload.text;
+            } else {
+                longTitleInput.value = reference;
+                longBodyInput.value = payload.verses.map((verse) => `${verse.verse}. ${verse.text}`).join("\n");
+                chunkStrategySelect.value = "lines";
+            }
+            statusLine.textContent = `Loaded ${reference}.`;
+        } catch (error) {
+            statusLine.textContent = "Unable to load passage. Please try again.";
+        }
+    });
+
+    populateBooks();
+</script>
 {% endblock %}

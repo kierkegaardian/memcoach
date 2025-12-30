@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from db import get_conn
 
 _DATASET_CACHE: Optional[List[Dict[str, Any]]] = None
+_INDEX_CACHE: Dict[str, Dict[str, Any]] = {}
 _DATASET_PATH = Path(__file__).resolve().parents[1] / "data" / "kjv.json"
 
 
@@ -111,3 +112,28 @@ def get_passage(
     if include_verses:
         response["verses"] = verses
     return response
+
+
+def get_translation_index(translation: str) -> Dict[str, Any]:
+    """Return ordered book/chapter metadata for a translation."""
+    cached = _INDEX_CACHE.get(translation)
+    if cached is not None:
+        return cached
+    data = load_kjv_dataset()
+    books: List[str] = []
+    chapters_by_book: Dict[str, Dict[int, int]] = {}
+    for entry in data:
+        if entry["translation"] != translation:
+            continue
+        book = entry["book"]
+        if book not in chapters_by_book:
+            chapters_by_book[book] = {}
+            books.append(book)
+        chapter = entry["chapter"]
+        verse = entry["verse"]
+        current_max = chapters_by_book[book].get(chapter, 0)
+        if verse > current_max:
+            chapters_by_book[book][chapter] = verse
+    index = {"books": books, "chapters": chapters_by_book}
+    _INDEX_CACHE[translation] = index
+    return index
