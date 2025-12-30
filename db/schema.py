@@ -1,6 +1,6 @@
 # SQL schema for MemCoach database
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA_SQL = """
 -- Kids
@@ -145,6 +145,16 @@ CREATE TABLE IF NOT EXISTS reviews (
     FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE,
     FOREIGN KEY (kid_id) REFERENCES kids (id) ON DELETE CASCADE
 );
+
+-- Bible verses (local KJV or other translations)
+CREATE TABLE IF NOT EXISTS bible_verses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    translation TEXT NOT NULL,
+    book TEXT NOT NULL,
+    chapter INTEGER NOT NULL,
+    verse INTEGER NOT NULL,
+    text TEXT NOT NULL
+);
 """
 
 # Indexes for performance
@@ -169,4 +179,6 @@ CREATE INDEX IF NOT EXISTS idx_deck_tags_deck ON deck_tags (deck_id);
 CREATE INDEX IF NOT EXISTS idx_deck_tags_tag ON deck_tags (tag_id);
 CREATE INDEX IF NOT EXISTS idx_card_tags_card ON card_tags (card_id);
 CREATE INDEX IF NOT EXISTS idx_card_tags_tag ON card_tags (tag_id);
+CREATE INDEX IF NOT EXISTS idx_bible_verses_lookup ON bible_verses (translation, book, chapter, verse);
+CREATE INDEX IF NOT EXISTS idx_bible_verses_book ON bible_verses (book, chapter, verse);
 """

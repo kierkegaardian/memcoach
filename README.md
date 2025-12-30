@@ -198,6 +198,30 @@ Then open: http://localhost:8000
 - Dark mode toggle
 - Progress bars per deck
 - Export/import decks as .txt
+
+## Local Bible Dataset (KJV)
+
+This repo ships with a small local KJV dataset in `data/kjv.json` to support offline verse lookups.
+
+**Format**
+```json
+{
+  "translation": "KJV",
+  "verses": [
+    {
+      "translation": "KJV",
+      "book": "John",
+      "chapter": 3,
+      "verse": 16,
+      "text": "For God so loved the world..."
+    }
+  ]
+}
+```
+
+**Lookup helper**
+- `utils/bible.py` provides `get_passage(translation, book, chapter, start_verse, end_verse, include_verses=False)`
+- Returns a dict with `text`, `reference`, and optionally `verses` (per-verse breakdown).
 - Mobile-friendly responsive design
 - Confetti on 10-day streak ✨
 
