@@ -8,6 +8,7 @@ import sqlite3
 from typing import Optional, List
 import re
 from utils.auth import require_parent_session
+from utils.bible import get_translation_index
 from utils.tags import parse_tag_names, set_card_tags
 
 router = APIRouter(dependencies=[Depends(require_parent_session)])
@@ -86,7 +87,16 @@ async def add_card_form(deck_id: int, request: Request, kid_id: Optional[int] = 
     if not deck_row:
         raise HTTPException(status_code=404, detail="Deck not found")
     deck = {"id": deck_row[0], "name": deck_row[1]}
-    return templates.TemplateResponse("decks/add_card.html", {"request": request, "deck": deck, "kid_id": kid_id})
+    bible_index = get_translation_index("KJV")
+    return templates.TemplateResponse(
+        "decks/add_card.html",
+        {
+            "request": request,
+            "deck": deck,
+            "kid_id": kid_id,
+            "bible_index": bible_index,
+        },
+    )
 
 @router.post("/{deck_id}/add")
 async def add_cards(
