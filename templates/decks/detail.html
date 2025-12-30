@@ -9,11 +9,14 @@
             <h2 class="text-3xl font-bold text-gray-800">{{ deck.name }}</h2>
             <p class="text-gray-600">Chunk mastery progress</p>
         </div>
-        {% if kid_id %}
-            <a href="/kids/{{ kid_id }}/decks" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Back to Decks</a>
-        {% else %}
-            <a href="/decks" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Back to Decks</a>
-        {% endif %}
+        <div class="flex space-x-3">
+            <a href="/decks/{{ deck.id }}/add{% if kid_id %}?kid_id={{ kid_id }}{% endif %}" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Add Cards</a>
+            {% if kid_id %}
+                <a href="/kids/{{ kid_id }}/decks" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Back to Decks</a>
+            {% else %}
+                <a href="/decks" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Back to Decks</a>
+            {% endif %}
+        </div>
     </div>
 
     <div class="bg-white p-4 rounded shadow space-y-3">
