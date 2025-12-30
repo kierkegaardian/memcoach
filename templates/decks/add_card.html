@@ -5,13 +5,34 @@
 {% block content %}
 <div class="max-w-2xl mx-auto">
     <h2 class="text-3xl font-bold mb-6">Add Cards to {{ deck.name }}</h2>
-    <form method="post" enctype="multipart/form-data" class="space-y-6 bg-white p-6 rounded-lg shadow-md">
+    
+    <!-- Tab Navigation -->
+    <div class="flex border-b border-gray-200 mb-6">
+        <button type="button" class="tab-btn px-6 py-3 font-medium text-gray-500 hover:text-blue-600 focus:outline-none border-b-2 border-transparent hover:border-blue-500" data-tab="manual">
+            Manual
+        </button>
+        <button type="button" class="tab-btn px-6 py-3 font-medium text-gray-500 hover:text-blue-600 focus:outline-none border-b-2 border-transparent hover:border-blue-500" data-tab="bible">
+            Bible (KJV)
+        </button>
+        <button type="button" class="tab-btn px-6 py-3 font-medium text-gray-500 hover:text-blue-600 focus:outline-none border-b-2 border-transparent hover:border-blue-500" data-tab="long">
+            Long Text
+        </button>
+        <button type="button" class="tab-btn px-6 py-3 font-medium text-gray-500 hover:text-blue-600 focus:outline-none border-b-2 border-transparent hover:border-blue-500" data-tab="file">
+            Upload File
+        </button>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="bg-white p-6 rounded-lg shadow-md">
         {% if kid_id %}
             <input type="hidden" name="kid_id" value="{{ kid_id }}">
         {% endif %}
-        <fieldset class="border p-4 rounded">
-            <legend class="text-lg font-medium mb-2">Manual Single Card</legend>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Hidden input to track current mode -->
+        <input type="hidden" id="card_mode" name="card_mode" value="manual">
+
+        <!-- Manual Tab -->
+        <fieldset id="tab-manual" class="tab-content space-y-4">
+            <legend class="sr-only">Manual Single Card</legend>
+            <div class="space-y-4">
                 <div>
                     <label for="prompt" class="block text-sm font-medium text-gray-700 mb-1">Prompt (what the child sees)</label>
                     <input type="text" id="prompt" name="prompt" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500" placeholder="e.g., Recite John 3:16">
@@ -22,10 +43,12 @@
                 </div>
             </div>
         </fieldset>
-        <fieldset class="border p-4 rounded">
-            <legend class="text-lg font-medium mb-2">Source: Bible (KJV)</legend>
+
+        <!-- Bible Tab -->
+        <fieldset id="tab-bible" class="tab-content hidden space-y-4">
+            <legend class="sr-only">Source: Bible (KJV)</legend>
             <div class="space-y-4">
-                <p class="text-sm text-gray-600">Choose a passage to autofill the card fields below.</p>
+                <p class="text-sm text-gray-600">Choose a passage to autofill the card fields in Manual or Long Text mode.</p>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label for="bible_book" class="block text-sm font-medium text-gray-700 mb-1">Book</label>
@@ -59,8 +82,10 @@
                 <p id="bible_status" class="text-sm text-gray-500"></p>
             </div>
         </fieldset>
-        <fieldset class="border p-4 rounded">
-            <legend class="text-lg font-medium mb-2">Long Text (Auto-Chunked)</legend>
+
+        <!-- Long Text Tab -->
+        <fieldset id="tab-long" class="tab-content hidden space-y-4">
+            <legend class="sr-only">Long Text (Auto-Chunked)</legend>
             <div class="space-y-4">
                 <div>
                     <label for="long_text_title" class="block text-sm font-medium text-gray-700 mb-1">Title</label>
@@ -88,16 +113,24 @@
                 </div>
             </div>
         </fieldset>
-        <fieldset class="border p-4 rounded">
-            <legend class="text-lg font-medium mb-2">Upload TXT File for Multiple Cards</legend>
-            <div class="space-y-3">
-                <input type="file" name="file" accept=".txt" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
-                <label for="prompt_base" class="block text-sm font-medium text-gray-700">Prompt Base</label>
-                <input type="text" id="prompt_base" name="prompt_base" value="Recite: " class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="Prefix for each card (e.g., 'Verse ')">
-                <p class="text-sm text-gray-500">TXT file split on blank lines into cards. Prompt = base + line num if multiple lines. Manual fields ignored if file uploaded.</p>
+
+        <!-- File Upload Tab -->
+        <fieldset id="tab-file" class="tab-content hidden space-y-4">
+            <legend class="sr-only">Upload TXT File</legend>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Upload File (.txt)</label>
+                    <input type="file" name="file" accept=".txt" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
+                </div>
+                <div>
+                    <label for="prompt_base" class="block text-sm font-medium text-gray-700 mb-1">Prompt Base</label>
+                    <input type="text" id="prompt_base" name="prompt_base" value="Recite: " class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="Prefix for each card (e.g., 'Verse ')">
+                </div>
+                <p class="text-sm text-gray-500">The file will be split into cards based on blank lines. The prompt for each card will be the "Prompt Base" followed by the card number.</p>
             </div>
         </fieldset>
-        <div class="flex space-x-3">
+
+        <div class="mt-6 flex space-x-3">
             <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-6 rounded-md transition">Add Cards</button>
             {% if kid_id %}
                 <a href="/kids/{{ kid_id }}/decks" class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-6 rounded-md transition">Back to Decks</a>
@@ -108,6 +141,12 @@
     </form>
 </div>
 <script>
+    // Tab switching logic
+    const tabs = document.querySelectorAll('.tab-btn');
+    const contents = document.querySelectorAll('.tab-content');
+    const modeInput = document.getElementById('card_mode');
+    
+    // Bible fields
     const bibleIndex = {{ bible_index | tojson }};
     const bookSelect = document.getElementById("bible_book");
     const chapterSelect = document.getElementById("bible_chapter");
@@ -117,11 +156,49 @@
     const fetchButton = document.getElementById("bible_fetch");
     const statusLine = document.getElementById("bible_status");
 
+    // Form fields to populate
     const promptInput = document.getElementById("prompt");
     const fullTextInput = document.getElementById("full_text");
     const longTitleInput = document.getElementById("long_text_title");
     const longBodyInput = document.getElementById("long_text_body");
     const chunkStrategySelect = document.getElementById("chunk_strategy");
+
+    function switchTab(tabName) {
+        // Reset active state for tabs
+        tabs.forEach(btn => {
+            if(btn.dataset.tab === tabName) {
+                btn.classList.add('text-blue-600', 'border-blue-500');
+                btn.classList.remove('text-gray-500', 'border-transparent');
+            } else {
+                btn.classList.remove('text-blue-600', 'border-blue-500');
+                btn.classList.add('text-gray-500', 'border-transparent');
+            }
+        });
+
+        // Hide all contents
+        contents.forEach(content => content.classList.add('hidden'));
+
+        // Show selected content
+        document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+
+        // Update hidden mode input. If 'bible' is selected, we don't change mode yet 
+        // until they fetch content which redirects to manual/long. 
+        // Actually, let's keep it simple: if they are on Bible tab, we don't submit. 
+        // The fetch button action will switch tabs for them.
+        if (tabName !== 'bible') {
+            modeInput.value = tabName;
+        }
+    }
+
+    tabs.forEach(btn => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+
+    // Initialize first tab
+    switchTab('manual');
+
+
+    // --- Bible Logic ---
 
     const chapterOptionsForBook = (book) => Object.keys(bibleIndex.chapters[book] || {}).map(Number).sort((a, b) => a - b);
     const maxVerseFor = (book, chapter) => bibleIndex.chapters[book]?.[chapter] || 1;
@@ -166,8 +243,10 @@
     };
 
     const populateBooks = () => {
-        setOptions(bookSelect, bibleIndex.books, bibleIndex.books[0]);
-        updateChapters();
+        if (bibleIndex.books && bibleIndex.books.length > 0) {
+            setOptions(bookSelect, bibleIndex.books, bibleIndex.books[0]);
+            updateChapters();
+        }
     };
 
     bookSelect.addEventListener("change", updateChapters);
@@ -180,7 +259,10 @@
         const startVerse = startVerseSelect.value;
         const endVerse = endVerseSelect.value;
         const mode = modeSelect.value;
+        
         statusLine.textContent = "Loading passage...";
+        statusLine.className = "text-sm text-gray-500"; // reset color
+
         try {
             const params = new URLSearchParams({
                 translation: "KJV",
@@ -195,17 +277,26 @@
             }
             const payload = await response.json();
             const reference = referenceText(book, Number(chapter), Number(startVerse), Number(endVerse));
+            
             if (mode === "single") {
                 promptInput.value = `Recite ${reference}`;
                 fullTextInput.value = payload.text;
+                // Switch to manual tab
+                switchTab('manual');
+                // Flash message on status line (visible only if they go back to bible tab? No, let's use alert or just switch)
+                // Just switching is good feedback.
             } else {
                 longTitleInput.value = reference;
                 longBodyInput.value = payload.verses.map((verse) => `${verse.verse}. ${verse.text}`).join("\n");
-                chunkStrategySelect.value = "lines";
+                chunkStrategySelect.value = "lines"; // Default for verse-by-verse
+                // Switch to long tab
+                switchTab('long');
             }
-            statusLine.textContent = `Loaded ${reference}.`;
+            statusLine.textContent = `Loaded ${reference}. Switched to ${mode === 'single' ? 'Manual' : 'Long Text'} tab.`;
+            statusLine.className = "text-sm text-green-600";
         } catch (error) {
-            statusLine.textContent = "Unable to load passage. Please try again.";
+            statusLine.textContent = "Unable to load passage. Please check your selection and try again.";
+            statusLine.className = "text-sm text-red-600";
         }
     });
 

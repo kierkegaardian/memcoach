@@ -101,6 +101,7 @@ async def add_card_form(deck_id: int, request: Request, kid_id: Optional[int] = 
 @router.post("/{deck_id}/add")
 async def add_cards(
     deck_id: int,
+    card_mode: Optional[str] = Form(None, description="Mode: manual, long, file"),
     prompt: Optional[str] = Form(None, description="Prompt for manual card"),
     full_text: Optional[str] = Form(None, description="Full text for manual card"),
     long_text_title: Optional[str] = Form(None, description="Title for long text"),
@@ -119,9 +120,19 @@ async def add_cards(
         cursor.execute("SELECT id FROM decks WHERE id = ? AND deleted_at IS NULL", (deck_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Deck not found")
-        if (long_text_title and not long_text_body) or (long_text_body and not long_text_title):
-            raise HTTPException(status_code=400, detail="Provide both a title and full text for long text")
-        if long_text_title and long_text_body:
+
+        # Determine mode if not explicitly provided
+        if not card_mode:
+            if long_text_title or long_text_body:
+                card_mode = "long"
+            elif file and file.filename:
+                card_mode = "file"
+            else:
+                card_mode = "manual"
+
+        if card_mode == "long":
+            if not long_text_title or not long_text_body:
+                raise HTTPException(status_code=400, detail="Provide both a title and full text for long text")
             start_position = get_next_card_position(cursor, deck_id)
             strategy = (chunk_strategy or "lines").lower()
             if strategy not in {"lines", "sentences", "stanzas", "custom"}:
@@ -147,7 +158,9 @@ async def add_cards(
                     (deck_id, prompt_text, chunk, text_id, index, start_position + index - 1),
                 )
             added = len(chunks)
-        elif file and file.filename:
+        elif card_mode == "file":
+            if not file or not file.filename:
+                 raise HTTPException(status_code=400, detail="No file uploaded")
             start_position = get_next_card_position(cursor, deck_id)
             if not file.filename.endswith('.txt'):
                 raise HTTPException(status_code=400, detail="File must be .txt")
@@ -165,7 +178,9 @@ async def add_cards(
                     VALUES (?, ?, ?, 1, date('now'), 2.5, 0, 'new', ?)
                 """, (deck_id, p, f_text, start_position + i - 1))
                 added += 1
-        elif prompt and full_text:
+        elif card_mode == "manual":
+            if not prompt or not full_text:
+                 raise HTTPException(status_code=400, detail="Provide manual card details")
             position = get_next_card_position(cursor, deck_id)
             cursor.execute(
                 """
@@ -176,7 +191,8 @@ async def add_cards(
             )
             added = 1
         else:
-            raise HTTPException(status_code=400, detail="Provide manual card details, long text, or upload a file")
+             raise HTTPException(status_code=400, detail="Invalid card mode")
+
         conn.commit()
         redirect_target = f"/kids/{kid_id}/decks" if kid_id else "/decks"
         return RedirectResponse(url=redirect_target, status_code=status.HTTP_303_SEE_OTHER)
