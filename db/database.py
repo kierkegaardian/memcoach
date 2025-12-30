@@ -31,6 +31,7 @@ def init_db():
         ensure_review_grading_fields(conn)
         ensure_assignment_defaults(conn)
         ensure_deck_mastery_rules(conn)
+        ensure_bible_verses_table(conn)
         ensure_schema_version(conn)
         conn.executescript(INDEXES_SQL)
         conn.commit()
@@ -172,6 +173,27 @@ def ensure_deck_mastery_rules(conn: sqlite3.Connection) -> None:
         """
         INSERT OR IGNORE INTO deck_mastery_rules (deck_id)
         SELECT id FROM decks WHERE deleted_at IS NULL
+        """
+    )
+
+def ensure_bible_verses_table(conn: sqlite3.Connection) -> None:
+    """Ensure bible_verses table exists for local scripture lookups."""
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='bible_verses'"
+    )
+    if cursor.fetchone():
+        return
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS bible_verses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            translation TEXT NOT NULL,
+            book TEXT NOT NULL,
+            chapter INTEGER NOT NULL,
+            verse INTEGER NOT NULL,
+            text TEXT NOT NULL
+        )
         """
     )
 
