@@ -246,5 +246,53 @@ pip install -r requirements.txt
 ```
 
 Deactivate with `deactivate`.
-EOF
-# memcoach
+
+## Roadmap: Multi-Platform Support
+
+The goal is to run MemCoach anywhere, from servers to local offline devices.
+
+### 1. Web (Hosted)
+*   **Current State:** Fully functional.
+*   **Next Steps:**
+    *   Dockerize the application (create `Dockerfile` and `docker-compose.yml`) for easy deployment to VPS, Fly.io, or Railway.
+    *   Add user authentication (currently relies on local network trust).
+
+### 2. Desktop (Local Linux, Windows, macOS)
+*   **Approach:** Package the Python backend as a standalone executable.
+*   **Tools:** `PyInstaller` or `briefcase` (from BeeWare).
+*   **Implementation:**
+    *   Use `pywebview` to create a lightweight desktop window that wraps the running FastAPI server, providing a "native app" feel without a browser chrome.
+    *   Bundle `ffmpeg` and local models (Ollama/Whisper) or provide a guided setup wizard.
+
+### 3. Mobile (Android & iOS)
+*   **Option A: PWA (Recommended First Step)**
+    *   Enhance the current web app with a `manifest.json` and Service Workers to allow "Add to Home Screen".
+    *   This works on both Android and iOS immediately if hosted on a server.
+*   **Option B: Native Offline App**
+    *   **Challenge:** Running Python (FastAPI/Ollama) locally on iOS is difficult due to JIT restrictions.
+    *   **Strategy:** Port the frontend to a framework like **Flutter** or **React Native**.
+    *   **Database:** Use local SQLite on the device.
+    *   **Sync:** Implement a sync mechanism to a self-hosted MemCoach server.
+
+## Roadmap: UI/UX Improvements
+
+### Terminology Refactor
+*   **Goal:** meaningful naming for educational contexts.
+*   **Changes:**
+    *   Rename "Kids" -> "Students"
+    *   Rename "Parent" -> "Teacher"
+*   **Implementation:** Update database models, routes, and UI templates to reflect these roles.
+
+### Shared Decks
+*   **Current State:** Decks are technically global but assigned per-kid.
+*   **Improvement:**
+    *   Create a "Library" view where Teachers create decks once.
+    *   "Assign" flow: Select a deck from the Library and assign it to one or multiple Students.
+    *   Visual distinction between "My Assignments" (Student view) and "All Decks" (Teacher view).
+
+### Add Card UI Polish
+*   **Goal:** Streamline the card creation workflow.
+*   **Tasks:**
+    *   Refine the Tabbed Interface (Manual/Bible/Catechism/Long Text/File) for better mobile responsiveness.
+    *   Add "preview" step before saving generated cards (especially for Long Text chunks).
+    *   Better error handling and validation feedback on the form.
