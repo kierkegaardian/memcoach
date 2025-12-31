@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, Form, Request, HTTPException, status, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from db.database import get_db
 from models.card import CardCreate
 import sqlite3
-from typing import Optional, List
+import json
+from typing import Optional, List, Dict, Any
 import re
 from utils.auth import require_parent_session
 from utils.bible import get_translation_index
@@ -14,6 +15,29 @@ from utils.tags import parse_tag_names, set_card_tags
 router = APIRouter(dependencies=[Depends(require_parent_session)])
 base_dir = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
+
+DATA_DIR = base_dir / "data"
+
+def load_catechisms() -> Dict[str, Any]:
+    path = DATA_DIR / "catechisms.json"
+    if not path.exists():
+        return {}
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+@router.get("/catechisms-data")
+async def get_catechisms_data():
+    """Return available catechisms metadata."""
+    data = load_catechisms()
+    # Return minimal data for UI (ID, Name, Count)
+    summary = []
+    for cid, cdata in data.items():
+        summary.append({
+            "id": cid,
+            "name": cdata["name"],
+            "count": len(cdata["questions"])
+        })
+    return JSONResponse(summary)
 
 def get_next_card_position(cursor, deck_id: int) -> int:
     cursor.execute(
@@ -101,7 +125,7 @@ async def add_card_form(deck_id: int, request: Request, kid_id: Optional[int] = 
 @router.post("/{deck_id}/add")
 async def add_cards(
     deck_id: int,
-    card_mode: Optional[str] = Form(None, description="Mode: manual, long, file"),
+    card_mode: Optional[str] = Form(None, description="Mode: manual, long, file, catechism"),
     prompt: Optional[str] = Form(None, description="Prompt for manual card"),
     full_text: Optional[str] = Form(None, description="Full text for manual card"),
     long_text_title: Optional[str] = Form(None, description="Title for long text"),
@@ -110,10 +134,13 @@ async def add_cards(
     chunk_delimiter: Optional[str] = Form(None, description="Custom delimiter"),
     file: Optional[UploadFile] = File(None, description="TXT file for multiple cards"),
     prompt_base: Optional[str] = Form("Recite: ", description="Prompt base for uploaded cards"),
+    catechism_id: Optional[str] = Form(None),
+    cat_start: Optional[int] = Form(None),
+    cat_end: Optional[int] = Form(None),
     kid_id: Optional[int] = Form(None, description="Kid ID for redirect"),
     conn = Depends(get_db)
 ):
-    """Add single manual card, long text chunks, or multiple from uploaded TXT file (split on blank lines)."""
+    """Add single manual card, long text chunks, catechism Q&A, or multiple from uploaded TXT file."""
     cursor = conn.cursor()
     added = 0
     try:
@@ -127,10 +154,43 @@ async def add_cards(
                 card_mode = "long"
             elif file and file.filename:
                 card_mode = "file"
+            elif catechism_id:
+                card_mode = "catechism"
             else:
                 card_mode = "manual"
 
-        if card_mode == "long":
+        if card_mode == "catechism":
+            if not catechism_id or cat_start is None or cat_end is None:
+                raise HTTPException(status_code=400, detail="Catechism selection required")
+            
+            data = load_catechisms()
+            cat = data.get(catechism_id)
+            if not cat:
+                raise HTTPException(status_code=404, detail="Catechism not found")
+            
+            questions = cat["questions"]
+            # Validate range
+            if cat_start < 1 or cat_end > len(questions) or cat_start > cat_end:
+                 raise HTTPException(status_code=400, detail="Invalid question range")
+
+            start_position = get_next_card_position(cursor, deck_id)
+            
+            # questions is 0-indexed list, but numbers are 1-based usually.
+            # We assume questions list is sorted 1..N.
+            # Let's verify by number in list or just slice. 
+            # Our converter stored "number": i. Let's filter.
+            selected = [q for q in questions if cat_start <= q["number"] <= cat_end]
+            
+            for i, q in enumerate(selected):
+                p_text = f"{cat['name']} Q{q['number']}: {q['question']}"
+                f_text = q['answer']
+                cursor.execute("""
+                    INSERT INTO cards (deck_id, prompt, full_text, interval_days, due_date, ease_factor, streak, mastery_status, position)
+                    VALUES (?, ?, ?, 1, date('now'), 2.5, 0, 'new', ?)
+                """, (deck_id, p_text, f_text, start_position + i))
+            added = len(selected)
+
+        elif card_mode == "long":
             if not long_text_title or not long_text_body:
                 raise HTTPException(status_code=400, detail="Provide both a title and full text for long text")
             start_position = get_next_card_position(cursor, deck_id)
