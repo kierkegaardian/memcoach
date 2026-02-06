@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from db.database import get_db
 from typing import List, Optional
+from utils.search import normalize_fts_query
 
 router = APIRouter()
 base_dir = Path(__file__).resolve().parent.parent
@@ -29,8 +30,8 @@ async def search_cards(
         params.append(deck_id)
 
     if due_today:
-        filters.append("c.due_date <= date('now')")
         if kid_id is not None:
+            filters.append("date(COALESCE(cp.due_date, date('now'))) <= date('now')")
             filters.append(
                 """
                 NOT EXISTS (
@@ -42,10 +43,21 @@ async def search_cards(
                 """
             )
             params.append(kid_id)
+        else:
+            filters.append("c.due_date <= date('now')")
 
-    if q:
+    fts_query = normalize_fts_query(q)
+    if q and fts_query == "":
+        return templates.TemplateResponse(
+            "partials/search_results.html",
+            {
+                "request": request,
+                "cards": [],
+            },
+        )
+    if fts_query:
         filters.append("cards_fts MATCH ?")
-        params.append(q)
+        params.append(fts_query)
 
     if tag:
         placeholders = ",".join("?" for _ in tag)
@@ -65,31 +77,58 @@ async def search_cards(
         params.append(len(tag))
 
     where_clause = " AND ".join(filters)
-    fts_join = "JOIN cards_fts ON cards_fts.rowid = c.id" if q else ""
+    fts_join = "JOIN cards_fts ON cards_fts.rowid = c.id" if fts_query else ""
 
-    cursor.execute(
-        f"""
-        SELECT
-            c.id,
-            c.prompt,
-            c.full_text,
-            c.due_date,
-            c.mastery_status,
-            c.deck_id,
-            d.name AS deck_name,
-            GROUP_CONCAT(t.name, ',') AS tags
-        FROM cards c
-        JOIN decks d ON d.id = c.deck_id
-        {fts_join}
-        LEFT JOIN card_tags ct ON ct.card_id = c.id
-        LEFT JOIN tags t ON t.id = ct.tag_id
-        WHERE {where_clause}
-        GROUP BY c.id
-        ORDER BY c.due_date ASC, c.id
-        LIMIT 100
-        """,
-        params,
-    )
+    if kid_id is not None:
+        params.insert(0, kid_id)
+        cursor.execute(
+            f"""
+            SELECT
+                c.id,
+                c.prompt,
+                c.full_text,
+                COALESCE(cp.due_date, c.due_date) AS due_date,
+                COALESCE(cp.mastery_status, c.mastery_status) AS mastery_status,
+                c.deck_id,
+                d.name AS deck_name,
+                GROUP_CONCAT(t.name, ',') AS tags
+            FROM cards c
+            JOIN decks d ON d.id = c.deck_id
+            LEFT JOIN card_progress cp ON cp.card_id = c.id AND cp.kid_id = ?
+            {fts_join}
+            LEFT JOIN card_tags ct ON ct.card_id = c.id
+            LEFT JOIN tags t ON t.id = ct.tag_id
+            WHERE {where_clause}
+            GROUP BY c.id
+            ORDER BY date(COALESCE(cp.due_date, c.due_date)) ASC, c.id
+            LIMIT 100
+            """,
+            params,
+        )
+    else:
+        cursor.execute(
+            f"""
+            SELECT
+                c.id,
+                c.prompt,
+                c.full_text,
+                c.due_date,
+                c.mastery_status,
+                c.deck_id,
+                d.name AS deck_name,
+                GROUP_CONCAT(t.name, ',') AS tags
+            FROM cards c
+            JOIN decks d ON d.id = c.deck_id
+            {fts_join}
+            LEFT JOIN card_tags ct ON ct.card_id = c.id
+            LEFT JOIN tags t ON t.id = ct.tag_id
+            WHERE {where_clause}
+            GROUP BY c.id
+            ORDER BY c.due_date ASC, c.id
+            LIMIT 100
+            """,
+            params,
+        )
     cards = []
     for row in cursor.fetchall():
         tags = [tag for tag in (row["tags"] or "").split(",") if tag]

@@ -10,6 +10,18 @@ CONFIG_DIR = Path.home() / ".memcoach"
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 PROJECT_CONFIG_EXAMPLE = Path(__file__).parent / "config.toml"
 
+def _coerce_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+def _coerce_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
 def load_config() -> Dict[str, Any]:
     """Load config from ~/.memcoach/config.toml, copy example if missing, load .env overrides."""
     load_dotenv()  # Load .env for overrides (e.g., OLLAMA_MODEL env var)
@@ -30,20 +42,37 @@ def load_config() -> Dict[str, Any]:
     }
 
     ollama_cfg = config.get("ollama", {})
+    ollama_timeout = os.getenv("OLLAMA_TIMEOUT")
+    if ollama_timeout is None:
+        ollama_timeout = ollama_cfg.get("timeout")
+    if ollama_timeout is None:
+        ollama_timeout = legacy_ollama.get("timeout")
+    if ollama_timeout is None:
+        ollama_timeout = 15
     config["ollama"] = {
         "model": os.getenv("OLLAMA_MODEL", ollama_cfg.get("model", legacy_ollama.get("model", "llama3.2"))),
-        "timeout": int(os.getenv("OLLAMA_TIMEOUT", ollama_cfg.get("timeout", legacy_ollama.get("timeout", 15))))
+        "timeout": _coerce_int(ollama_timeout, 15),
     }
     grading_cfg = config.get("grading", {})
+    perfect_threshold = os.getenv("LEVENSHTEIN_PERFECT_THRESHOLD")
+    if perfect_threshold is None:
+        perfect_threshold = grading_cfg.get("levenshtein_perfect_threshold")
+    if perfect_threshold is None:
+        perfect_threshold = legacy_grading.get("levenshtein_perfect_threshold")
+    if perfect_threshold is None:
+        perfect_threshold = 0.98
+
+    good_threshold = os.getenv("LEVENSHTEIN_GOOD_THRESHOLD")
+    if good_threshold is None:
+        good_threshold = grading_cfg.get("levenshtein_good_threshold")
+    if good_threshold is None:
+        good_threshold = legacy_grading.get("levenshtein_good_threshold")
+    if good_threshold is None:
+        good_threshold = 0.85
+
     config["grading"] = {
-        "levenshtein_perfect_threshold": float(os.getenv(
-            "LEVENSHTEIN_PERFECT_THRESHOLD",
-            grading_cfg.get("levenshtein_perfect_threshold", legacy_grading.get("levenshtein_perfect_threshold", 0.98))
-        )),
-        "levenshtein_good_threshold": float(os.getenv(
-            "LEVENSHTEIN_GOOD_THRESHOLD",
-            grading_cfg.get("levenshtein_good_threshold", legacy_grading.get("levenshtein_good_threshold", 0.85))
-        )),
+        "levenshtein_perfect_threshold": _coerce_float(perfect_threshold, 0.98),
+        "levenshtein_good_threshold": _coerce_float(good_threshold, 0.85),
         "use_llm_on_borderline": os.getenv(
             "USE_LLM_ON_BORDERLINE",
             str(grading_cfg.get("use_llm_on_borderline", legacy_grading.get("use_llm_on_borderline", True)))
@@ -116,5 +145,5 @@ def set_parent_pin_hash(pin_hash: str) -> None:
             section = "\n".join(lines) + "\n"
         return section + rest
 
-    text = re.sub(r"(?ms)(^\\[parent\\].*?)(^\\[|\\Z)", update_section, text)
+    text = re.sub(r"(?ms)(^\s*\[parent\].*?)(^\s*\[|\Z)", update_section, text)
     CONFIG_PATH.write_text(text)

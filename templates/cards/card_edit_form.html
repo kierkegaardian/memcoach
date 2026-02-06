@@ -5,6 +5,9 @@
         hx-target="#card-{{ card.id }}"
         hx-swap="outerHTML"
     >
+        {% if kid_id %}
+            <input type="hidden" name="kid_id" value="{{ kid_id }}">
+        {% endif %}
         <div>
             <label for="card-prompt-{{ card.id }}" class="block text-sm font-medium text-gray-700">Prompt</label>
             <input
@@ -28,7 +31,7 @@
             <button
                 type="button"
                 class="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600"
-                hx-get="/decks/{{ deck_id }}/cards/{{ card.id }}/row"
+                hx-get="/decks/{{ deck_id }}/cards/{{ card.id }}/row{% if kid_id %}?kid_id={{ kid_id }}{% endif %}"
                 hx-target="#card-{{ card.id }}"
                 hx-swap="outerHTML"
             >

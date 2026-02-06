@@ -46,26 +46,48 @@ def get_next_card_position(cursor, deck_id: int) -> int:
     )
     return int(cursor.fetchone()[0] or 0) + 1
 
-def get_cards_for_deck(cursor, deck_id: int) -> List[dict]:
-    cursor.execute(
-        """
-        SELECT
-            c.id,
-            c.prompt,
-            c.mastery_status,
-            c.streak,
-            c.due_date,
-            c.position,
-            GROUP_CONCAT(t.name, ',') AS tags
-        FROM cards c
-        LEFT JOIN card_tags ct ON ct.card_id = c.id
-        LEFT JOIN tags t ON t.id = ct.tag_id
-        WHERE c.deck_id = ? AND c.deleted_at IS NULL
-        GROUP BY c.id
-        ORDER BY c.position, c.id
-        """,
-        (deck_id,),
-    )
+def get_cards_for_deck(cursor, deck_id: int, kid_id: Optional[int] = None) -> List[dict]:
+    if kid_id is None:
+        cursor.execute(
+            """
+            SELECT
+                c.id,
+                c.prompt,
+                c.mastery_status,
+                c.streak,
+                c.due_date,
+                c.position,
+                GROUP_CONCAT(t.name, ',') AS tags
+            FROM cards c
+            LEFT JOIN card_tags ct ON ct.card_id = c.id
+            LEFT JOIN tags t ON t.id = ct.tag_id
+            WHERE c.deck_id = ? AND c.deleted_at IS NULL
+            GROUP BY c.id
+            ORDER BY c.position, c.id
+            """,
+            (deck_id,),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT
+                c.id,
+                c.prompt,
+                COALESCE(cp.mastery_status, c.mastery_status) AS mastery_status,
+                COALESCE(cp.streak, c.streak) AS streak,
+                COALESCE(cp.due_date, c.due_date) AS due_date,
+                c.position,
+                GROUP_CONCAT(t.name, ',') AS tags
+            FROM cards c
+            LEFT JOIN card_progress cp ON cp.card_id = c.id AND cp.kid_id = ?
+            LEFT JOIN card_tags ct ON ct.card_id = c.id
+            LEFT JOIN tags t ON t.id = ct.tag_id
+            WHERE c.deck_id = ? AND c.deleted_at IS NULL
+            GROUP BY c.id
+            ORDER BY c.position, c.id
+            """,
+            (kid_id, deck_id),
+        )
     cards = []
     for row in cursor.fetchall():
         card = dict(row)
@@ -262,26 +284,53 @@ async def add_cards(
         raise HTTPException(status_code=500, detail=f"Failed to add cards: {str(e)}")
 
 @router.get("/{deck_id}/cards/{card_id}/row", response_class=HTMLResponse)
-async def card_row(deck_id: int, card_id: int, request: Request, conn = Depends(get_db)):
+async def card_row(
+    deck_id: int,
+    card_id: int,
+    request: Request,
+    kid_id: Optional[int] = None,
+    conn = Depends(get_db),
+):
     cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT
-            c.id,
-            c.prompt,
-            c.mastery_status,
-            c.streak,
-            c.due_date,
-            c.position,
-            GROUP_CONCAT(t.name, ',') AS tags
-        FROM cards c
-        LEFT JOIN card_tags ct ON ct.card_id = c.id
-        LEFT JOIN tags t ON t.id = ct.tag_id
-        WHERE c.id = ? AND c.deck_id = ? AND c.deleted_at IS NULL
-        GROUP BY c.id
-        """,
-        (card_id, deck_id),
-    )
+    if kid_id is not None:
+        cursor.execute(
+            """
+            SELECT
+                c.id,
+                c.prompt,
+                COALESCE(cp.mastery_status, c.mastery_status) AS mastery_status,
+                COALESCE(cp.streak, c.streak) AS streak,
+                COALESCE(cp.due_date, c.due_date) AS due_date,
+                c.position,
+                GROUP_CONCAT(t.name, ',') AS tags
+            FROM cards c
+            LEFT JOIN card_progress cp ON cp.card_id = c.id AND cp.kid_id = ?
+            LEFT JOIN card_tags ct ON ct.card_id = c.id
+            LEFT JOIN tags t ON t.id = ct.tag_id
+            WHERE c.id = ? AND c.deck_id = ? AND c.deleted_at IS NULL
+            GROUP BY c.id
+            """,
+            (kid_id, card_id, deck_id),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT
+                c.id,
+                c.prompt,
+                c.mastery_status,
+                c.streak,
+                c.due_date,
+                c.position,
+                GROUP_CONCAT(t.name, ',') AS tags
+            FROM cards c
+            LEFT JOIN card_tags ct ON ct.card_id = c.id
+            LEFT JOIN tags t ON t.id = ct.tag_id
+            WHERE c.id = ? AND c.deck_id = ? AND c.deleted_at IS NULL
+            GROUP BY c.id
+            """,
+            (card_id, deck_id),
+        )
     card = cursor.fetchone()
     if not card:
         raise HTTPException(status_code=404, detail="Card not found")
@@ -292,6 +341,7 @@ async def card_row(deck_id: int, card_id: int, request: Request, conn = Depends(
             "request": request,
             "card": {**dict(card), "tags": [tag for tag in (card["tags"] or "").split(",") if tag]},
             "deck_id": deck_id,
+            "kid_id": kid_id,
             **flags,
         },
     )
@@ -302,6 +352,7 @@ async def update_card_tags(
     card_id: int,
     request: Request,
     tags: str = Form(""),
+    kid_id: Optional[int] = Form(None),
     conn = Depends(get_db),
 ):
     cursor = conn.cursor()
@@ -314,24 +365,45 @@ async def update_card_tags(
     tag_names = parse_tag_names(tags)
     set_card_tags(conn, card_id, tag_names)
     conn.commit()
-    cursor.execute(
-        """
-        SELECT
-            c.id,
-            c.prompt,
-            c.mastery_status,
-            c.streak,
-            c.due_date,
-            c.position,
-            GROUP_CONCAT(t.name, ',') AS tags
-        FROM cards c
-        LEFT JOIN card_tags ct ON ct.card_id = c.id
-        LEFT JOIN tags t ON t.id = ct.tag_id
-        WHERE c.id = ? AND c.deck_id = ? AND c.deleted_at IS NULL
-        GROUP BY c.id
-        """,
-        (card_id, deck_id),
-    )
+    if kid_id is not None:
+        cursor.execute(
+            """
+            SELECT
+                c.id,
+                c.prompt,
+                COALESCE(cp.mastery_status, c.mastery_status) AS mastery_status,
+                COALESCE(cp.streak, c.streak) AS streak,
+                COALESCE(cp.due_date, c.due_date) AS due_date,
+                c.position,
+                GROUP_CONCAT(t.name, ',') AS tags
+            FROM cards c
+            LEFT JOIN card_progress cp ON cp.card_id = c.id AND cp.kid_id = ?
+            LEFT JOIN card_tags ct ON ct.card_id = c.id
+            LEFT JOIN tags t ON t.id = ct.tag_id
+            WHERE c.id = ? AND c.deck_id = ? AND c.deleted_at IS NULL
+            GROUP BY c.id
+            """,
+            (kid_id, card_id, deck_id),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT
+                c.id,
+                c.prompt,
+                c.mastery_status,
+                c.streak,
+                c.due_date,
+                c.position,
+                GROUP_CONCAT(t.name, ',') AS tags
+            FROM cards c
+            LEFT JOIN card_tags ct ON ct.card_id = c.id
+            LEFT JOIN tags t ON t.id = ct.tag_id
+            WHERE c.id = ? AND c.deck_id = ? AND c.deleted_at IS NULL
+            GROUP BY c.id
+            """,
+            (card_id, deck_id),
+        )
     card = cursor.fetchone()
     if not card:
         raise HTTPException(status_code=404, detail="Card not found")
@@ -342,12 +414,19 @@ async def update_card_tags(
             "request": request,
             "card": {**dict(card), "tags": [tag for tag in (card["tags"] or "").split(",") if tag]},
             "deck_id": deck_id,
+            "kid_id": kid_id,
             **flags,
         },
     )
 
 @router.get("/{deck_id}/cards/{card_id}/edit", response_class=HTMLResponse)
-async def edit_card_form(deck_id: int, card_id: int, request: Request, conn = Depends(get_db)):
+async def edit_card_form(
+    deck_id: int,
+    card_id: int,
+    request: Request,
+    kid_id: Optional[int] = None,
+    conn = Depends(get_db),
+):
     cursor = conn.cursor()
     cursor.execute(
         "SELECT id, prompt, full_text FROM cards WHERE id = ? AND deck_id = ? AND deleted_at IS NULL",
@@ -356,10 +435,21 @@ async def edit_card_form(deck_id: int, card_id: int, request: Request, conn = De
     card = cursor.fetchone()
     if not card:
         raise HTTPException(status_code=404, detail="Card not found")
-    return templates.TemplateResponse("cards/card_edit_form.html", {"request": request, "card": dict(card), "deck_id": deck_id})
+    return templates.TemplateResponse(
+        "cards/card_edit_form.html",
+        {"request": request, "card": dict(card), "deck_id": deck_id, "kid_id": kid_id},
+    )
 
 @router.post("/{deck_id}/cards/{card_id}/edit", response_class=HTMLResponse)
-async def edit_card(deck_id: int, card_id: int, request: Request, prompt: str = Form(...), full_text: str = Form(...), conn = Depends(get_db)):
+async def edit_card(
+    deck_id: int,
+    card_id: int,
+    request: Request,
+    prompt: str = Form(...),
+    full_text: str = Form(...),
+    kid_id: Optional[int] = Form(None),
+    conn = Depends(get_db),
+):
     if not prompt or not prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt is required")
     if not full_text or not full_text.strip():
@@ -376,24 +466,45 @@ async def edit_card(deck_id: int, card_id: int, request: Request, prompt: str = 
     if cursor.rowcount == 0:
         raise HTTPException(status_code=404, detail="Card not found")
     conn.commit()
-    cursor.execute(
-        """
-        SELECT
-            c.id,
-            c.prompt,
-            c.mastery_status,
-            c.streak,
-            c.due_date,
-            c.position,
-            GROUP_CONCAT(t.name, ',') AS tags
-        FROM cards c
-        LEFT JOIN card_tags ct ON ct.card_id = c.id
-        LEFT JOIN tags t ON t.id = ct.tag_id
-        WHERE c.id = ? AND c.deck_id = ? AND c.deleted_at IS NULL
-        GROUP BY c.id
-        """,
-        (card_id, deck_id),
-    )
+    if kid_id is not None:
+        cursor.execute(
+            """
+            SELECT
+                c.id,
+                c.prompt,
+                COALESCE(cp.mastery_status, c.mastery_status) AS mastery_status,
+                COALESCE(cp.streak, c.streak) AS streak,
+                COALESCE(cp.due_date, c.due_date) AS due_date,
+                c.position,
+                GROUP_CONCAT(t.name, ',') AS tags
+            FROM cards c
+            LEFT JOIN card_progress cp ON cp.card_id = c.id AND cp.kid_id = ?
+            LEFT JOIN card_tags ct ON ct.card_id = c.id
+            LEFT JOIN tags t ON t.id = ct.tag_id
+            WHERE c.id = ? AND c.deck_id = ? AND c.deleted_at IS NULL
+            GROUP BY c.id
+            """,
+            (kid_id, card_id, deck_id),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT
+                c.id,
+                c.prompt,
+                c.mastery_status,
+                c.streak,
+                c.due_date,
+                c.position,
+                GROUP_CONCAT(t.name, ',') AS tags
+            FROM cards c
+            LEFT JOIN card_tags ct ON ct.card_id = c.id
+            LEFT JOIN tags t ON t.id = ct.tag_id
+            WHERE c.id = ? AND c.deck_id = ? AND c.deleted_at IS NULL
+            GROUP BY c.id
+            """,
+            (card_id, deck_id),
+        )
     card = cursor.fetchone()
     flags = get_card_position_flags(cursor, deck_id, card["position"])
     return templates.TemplateResponse(
@@ -402,6 +513,7 @@ async def edit_card(deck_id: int, card_id: int, request: Request, prompt: str = 
             "request": request,
             "card": {**dict(card), "tags": [tag for tag in (card["tags"] or "").split(",") if tag]},
             "deck_id": deck_id,
+            "kid_id": kid_id,
             **flags,
         },
     )
@@ -419,7 +531,14 @@ async def delete_card(deck_id: int, card_id: int, conn = Depends(get_db)):
     return HTMLResponse("")
 
 @router.post("/{deck_id}/cards/{card_id}/move", response_class=HTMLResponse)
-async def move_card(deck_id: int, card_id: int, request: Request, direction: str = Form(...), conn = Depends(get_db)):
+async def move_card(
+    deck_id: int,
+    card_id: int,
+    request: Request,
+    direction: str = Form(...),
+    kid_id: Optional[int] = Form(None),
+    conn = Depends(get_db),
+):
     if direction not in {"up", "down"}:
         raise HTTPException(status_code=400, detail="Invalid direction")
     cursor = conn.cursor()
@@ -461,8 +580,8 @@ async def move_card(deck_id: int, card_id: int, request: Request, direction: str
             (current["position"], neighbor["id"]),
         )
         conn.commit()
-    cards = get_cards_for_deck(cursor, deck_id)
+    cards = get_cards_for_deck(cursor, deck_id, kid_id=kid_id)
     return templates.TemplateResponse(
         "cards/card_list.html",
-        {"request": request, "cards": cards, "deck_id": deck_id},
+        {"request": request, "cards": cards, "deck_id": deck_id, "kid_id": kid_id},
     )

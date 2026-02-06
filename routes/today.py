@@ -17,6 +17,7 @@ from utils.hints import (
 )
 from utils.mastery import mastery_status_from_rules, get_deck_mastery_rules
 from utils.sm2 import map_grade_to_quality, update_sm2
+from utils.progress import default_progress, get_card_progress, upsert_card_progress
 from utils.auth import require_parent_session
 from config import load_config
 
@@ -98,6 +99,11 @@ def fetch_due_cards(conn, kid_id: int, deck_id: int) -> List[Dict]:
         """
         SELECT
             c.*,
+            COALESCE(cp.due_date, date('now')) AS due_date,
+            COALESCE(cp.interval_days, 1) AS interval_days,
+            COALESCE(cp.ease_factor, 2.5) AS ease_factor,
+            COALESCE(cp.streak, 0) AS streak,
+            COALESCE(cp.mastery_status, 'new') AS mastery_status,
             d.name AS deck_name,
             d.review_mode AS review_mode,
             t.title AS text_title,
@@ -113,8 +119,9 @@ def fetch_due_cards(conn, kid_id: int, deck_id: int) -> List[Dict]:
         FROM cards c
         JOIN decks d ON d.id = c.deck_id
         LEFT JOIN texts t ON t.id = c.text_id
+        LEFT JOIN card_progress cp ON cp.card_id = c.id AND cp.kid_id = ?
         WHERE c.deck_id = ?
-            AND c.due_date <= date('now')
+            AND date(COALESCE(cp.due_date, date('now'))) <= date('now')
             AND c.deleted_at IS NULL
             AND (c.text_id IS NULL OR t.deleted_at IS NULL)
             AND NOT EXISTS (
@@ -123,9 +130,9 @@ def fetch_due_cards(conn, kid_id: int, deck_id: int) -> List[Dict]:
                     AND r.kid_id = ?
                     AND date(r.ts) = date('now')
             )
-        ORDER BY c.due_date ASC, c.id ASC
+        ORDER BY date(COALESCE(cp.due_date, date('now'))) ASC, c.id ASC
         """,
-        (deck_id, kid_id),
+        (kid_id, deck_id, kid_id),
     )
     cards = []
     for row in cursor.fetchall():
@@ -334,8 +341,9 @@ async def submit_today_review(
         final_grade = auto_grade
         graded_by = "auto"
         quality = map_grade_to_quality(final_grade)
+    progress = get_card_progress(conn, kid_id, card_id) or default_progress()
     new_interval, new_ef, new_streak, new_due = update_sm2(
-        card["interval_days"], card["ease_factor"], quality, card["streak"]
+        progress.interval_days, progress.ease_factor, quality, progress.streak
     )
     mastery_rules = get_deck_mastery_rules(conn, card["deck_id"])
     mastery_status = mastery_status_from_rules(
@@ -344,14 +352,7 @@ async def submit_today_review(
         new_interval,
         mastery_rules,
     )
-    cursor.execute(
-        """
-        UPDATE cards
-        SET interval_days = ?, ease_factor = ?, streak = ?, due_date = ?, mastery_status = ?
-        WHERE id = ?
-        """,
-        (new_interval, new_ef, new_streak, new_due.isoformat(), mastery_status, card_id),
-    )
+    review_ts = datetime.now(timezone.utc).isoformat()
     duration_seconds = None
     if started_at:
         try:
@@ -389,6 +390,17 @@ async def submit_today_review(
             hint_mode,
             duration_seconds,
         ),
+    )
+    upsert_card_progress(
+        conn,
+        kid_id=kid_id,
+        card_id=card_id,
+        interval_days=new_interval,
+        due_date=new_due.isoformat(),
+        ease_factor=new_ef,
+        streak=new_streak,
+        mastery_status=mastery_status,
+        last_review_ts=review_ts,
     )
     conn.commit()
     color_class = {

@@ -13,8 +13,15 @@ from utils.hints import (
 )
 from utils.sm2 import update_sm2, map_grade_to_quality
 from utils.mastery import mastery_status_from_rules, get_deck_mastery_rules
+from utils.progress import (
+    compute_progress_from_reviews,
+    default_progress,
+    get_card_progress,
+    upsert_card_progress,
+)
 from config import load_config
 from utils.auth import require_parent_session
+from utils.search import normalize_fts_query
 import sqlite3
 from typing import Optional, Dict, List
 from datetime import datetime, timezone
@@ -47,7 +54,7 @@ def get_next_card_for_review(
     cursor = conn.cursor()
     filters = [
         "c.deck_id = ?",
-        "c.due_date <= date('now')",
+        "date(COALESCE(cp.due_date, date('now'))) <= date('now')",
         "c.deleted_at IS NULL",
         "(c.text_id IS NULL OR t.deleted_at IS NULL)",
         "NOT EXISTS (SELECT 1 FROM reviews r WHERE r.card_id = c.id AND r.kid_id = ? AND date(r.ts) = date('now'))",
@@ -55,9 +62,13 @@ def get_next_card_for_review(
     params: List[object] = [deck_id, kid_id]
     fts_join = ""
     if search_query:
-        filters.append("cards_fts MATCH ?")
-        params.append(search_query)
-        fts_join = "JOIN cards_fts ON cards_fts.rowid = c.id"
+        fts_query = normalize_fts_query(search_query)
+        if fts_query == "":
+            return None
+        if fts_query:
+            filters.append("cards_fts MATCH ?")
+            params.append(fts_query)
+            fts_join = "JOIN cards_fts ON cards_fts.rowid = c.id"
     if tag_filters:
         placeholders = ",".join("?" for _ in tag_filters)
         filters.append(
@@ -76,14 +87,19 @@ def get_next_card_for_review(
         params.append(len(tag_filters))
     where_clause = " AND ".join(filters)
     order_clause = (
-        "ORDER BY c.due_date ASC, (c.text_id IS NULL), c.text_id, c.chunk_index"
+        "ORDER BY date(COALESCE(cp.due_date, date('now'))) ASC, (c.text_id IS NULL), c.text_id, c.chunk_index"
         if group_texts
-        else "ORDER BY c.due_date ASC, random()"
+        else "ORDER BY date(COALESCE(cp.due_date, date('now'))) ASC, random()"
     )
     cursor.execute(
         f"""
         SELECT
             c.*,
+            COALESCE(cp.due_date, date('now')) AS due_date,
+            COALESCE(cp.interval_days, 1) AS interval_days,
+            COALESCE(cp.ease_factor, 2.5) AS ease_factor,
+            COALESCE(cp.streak, 0) AS streak,
+            COALESCE(cp.mastery_status, 'new') AS mastery_status,
             t.title AS text_title,
             (
                 SELECT COUNT(*) FROM cards c2 WHERE c2.text_id = c.text_id
@@ -96,12 +112,13 @@ def get_next_card_for_review(
             ) AS tags
         FROM cards c
         LEFT JOIN texts t ON t.id = c.text_id
+        LEFT JOIN card_progress cp ON cp.card_id = c.id AND cp.kid_id = ?
         {fts_join}
         WHERE {where_clause}
         {order_clause}
         LIMIT 1
         """,
-        params,
+        [kid_id, *params],
     )
     row = cursor.fetchone()
     if row:
@@ -291,8 +308,9 @@ async def submit_review(
         final_grade = auto_grade
         graded_by = "auto"
         quality = map_grade_to_quality(final_grade)
+    progress = get_card_progress(conn, kid_id, card_id) or default_progress()
     new_interval, new_ef, new_streak, new_due = update_sm2(
-        card['interval_days'], card['ease_factor'], quality, card['streak']
+        progress.interval_days, progress.ease_factor, quality, progress.streak
     )
     mastery_rules = get_deck_mastery_rules(conn, deck_id)
     mastery_status = mastery_status_from_rules(
@@ -301,11 +319,7 @@ async def submit_review(
         new_interval,
         mastery_rules,
     )
-    cursor.execute("""
-        UPDATE cards
-        SET interval_days = ?, ease_factor = ?, streak = ?, due_date = ?, mastery_status = ?
-        WHERE id = ?
-    """, (new_interval, new_ef, new_streak, new_due.isoformat(), mastery_status, card_id))
+    review_ts = datetime.now(timezone.utc).isoformat()
     duration_seconds = None
     if started_at:
         try:
@@ -342,6 +356,17 @@ async def submit_review(
         duration_seconds,
     ))
     review_id = cursor.lastrowid
+    upsert_card_progress(
+        conn,
+        kid_id=kid_id,
+        card_id=card_id,
+        interval_days=new_interval,
+        due_date=new_due.isoformat(),
+        ease_factor=new_ef,
+        streak=new_streak,
+        mastery_status=mastery_status,
+        last_review_ts=review_ts,
+    )
     conn.commit()
     color_class = {
         'perfect': 'bg-green-100 border-green-400 text-green-800',
@@ -396,8 +421,15 @@ async def override_review_grade(
     )
     cursor.execute(
         """
-        SELECT r.user_text, r.hint_mode, r.kid_id, r.auto_grade, r.final_grade, r.graded_by,
-               c.full_text, c.deck_id
+        SELECT r.card_id,
+               r.user_text,
+               r.hint_mode,
+               r.kid_id,
+               r.auto_grade,
+               r.final_grade,
+               r.graded_by,
+               c.full_text,
+               c.deck_id
         FROM reviews r
         JOIN cards c ON c.id = r.card_id
         WHERE r.id = ?
@@ -407,6 +439,19 @@ async def override_review_grade(
     row = cursor.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Review not found")
+    progress = compute_progress_from_reviews(conn, row["kid_id"], row["card_id"])
+    if progress:
+        upsert_card_progress(
+            conn,
+            kid_id=row["kid_id"],
+            card_id=row["card_id"],
+            interval_days=progress.interval_days,
+            due_date=progress.due_date,
+            ease_factor=progress.ease_factor,
+            streak=progress.streak,
+            mastery_status=progress.mastery_status,
+            last_review_ts=progress.last_review_ts,
+        )
     conn.commit()
     color_class = {
         "perfect": "bg-green-100 border-green-400 text-green-800",

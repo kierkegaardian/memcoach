@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Form, Request, status
+from fastapi import APIRouter, Depends, Form, Request, Query, status, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -26,8 +26,21 @@ def _week_starts(anchor: date, weeks: int = 8) -> List[date]:
 
 
 @router.get("/", response_class=HTMLResponse)
-async def plan_view(request: Request, conn=Depends(get_db)):
+async def plan_view(
+    request: Request,
+    kid_id: Optional[int] = Query(default=None),
+    conn=Depends(get_db),
+):
     cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM kids WHERE deleted_at IS NULL ORDER BY name")
+    kids = [{"id": row[0], "name": row[1]} for row in cursor.fetchall()]
+    selected_kid = None
+    if kid_id is not None:
+        cursor.execute("SELECT id, name FROM kids WHERE id = ? AND deleted_at IS NULL", (kid_id,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Kid not found")
+        selected_kid = {"id": row[0], "name": row[1]}
     cursor.execute("SELECT id, name FROM decks WHERE deleted_at IS NULL ORDER BY name")
     deck_rows = cursor.fetchall()
     decks = [{"id": row[0], "name": row[1]} for row in deck_rows]
@@ -42,18 +55,24 @@ async def plan_view(request: Request, conn=Depends(get_db)):
         for row in plan_rows
     }
 
-    cursor.execute(
-        """
-        SELECT c.id, c.deck_id, c.prompt, c.full_text, c.due_date, d.name
-        FROM cards c
-        JOIN decks d ON c.deck_id = d.id
-        WHERE date(c.due_date) >= date('now')
-        AND c.deleted_at IS NULL
-        AND d.deleted_at IS NULL
-        ORDER BY d.name, c.due_date
-        """
-    )
-    card_rows = cursor.fetchall()
+    card_rows = []
+    if selected_kid:
+        cursor.execute(
+            """
+            SELECT c.id, c.deck_id, c.prompt, c.full_text,
+                   COALESCE(cp.due_date, date('now')) AS due_date,
+                   d.name
+            FROM cards c
+            JOIN decks d ON c.deck_id = d.id
+            LEFT JOIN card_progress cp ON cp.card_id = c.id AND cp.kid_id = ?
+            WHERE date(COALESCE(cp.due_date, date('now'))) >= date('now')
+            AND c.deleted_at IS NULL
+            AND d.deleted_at IS NULL
+            ORDER BY d.name, date(COALESCE(cp.due_date, date('now')))
+            """,
+            (kid_id,),
+        )
+        card_rows = cursor.fetchall()
 
     cards_by_deck: Dict[int, List[dict]] = {deck["id"]: [] for deck in decks}
     for row in card_rows:
@@ -110,6 +129,8 @@ async def plan_view(request: Request, conn=Depends(get_db)):
             "request": request,
             "deck_views": deck_views,
             "week_labels": week_labels,
+            "kids": kids,
+            "selected_kid": selected_kid,
         },
     )
 
@@ -119,6 +140,7 @@ async def update_plan_settings(
     deck_id: int = Form(...),
     weekly_goal: Optional[int] = Form(None),
     target_date: Optional[str] = Form(None),
+    kid_id: Optional[int] = Form(None),
     conn=Depends(get_db),
 ):
     cleaned_goal = int(weekly_goal) if weekly_goal not in (None, "") else None
@@ -135,4 +157,5 @@ async def update_plan_settings(
         (deck_id, cleaned_goal, cleaned_target),
     )
     conn.commit()
-    return RedirectResponse(url="/plan", status_code=status.HTTP_303_SEE_OTHER)
+    redirect_url = f"/plan?kid_id={kid_id}" if kid_id else "/plan"
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)

@@ -38,22 +38,26 @@ async def kid_stats(kid_id: int, request: Request, conn = Depends(get_db)):
     """, (kid_id,))
     deck_stats = [{"deck": row[0], "reviews": row[1]} for row in cursor.fetchall()]
     cursor.execute(
-        "SELECT MAX(streak) FROM cards c JOIN reviews r ON c.id = r.card_id WHERE r.kid_id = ? AND c.deleted_at IS NULL",
+        "SELECT MAX(streak) FROM card_progress WHERE kid_id = ?",
         (kid_id,),
     )
     max_streak = cursor.fetchone()[0] or 0
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT d.id, d.name,
-            SUM(CASE WHEN c.mastery_status = 'mastered' THEN 1 ELSE 0 END) AS mastered,
-            SUM(CASE WHEN c.mastery_status = 'learning' THEN 1 ELSE 0 END) AS learning,
-            SUM(CASE WHEN c.mastery_status = 'new' THEN 1 ELSE 0 END) AS new_count,
+            SUM(CASE WHEN COALESCE(cp.mastery_status, 'new') = 'mastered' THEN 1 ELSE 0 END) AS mastered,
+            SUM(CASE WHEN COALESCE(cp.mastery_status, 'new') = 'learning' THEN 1 ELSE 0 END) AS learning,
+            SUM(CASE WHEN COALESCE(cp.mastery_status, 'new') = 'new' THEN 1 ELSE 0 END) AS new_count,
             COUNT(c.id) AS total
         FROM decks d
         LEFT JOIN cards c ON c.deck_id = d.id AND c.deleted_at IS NULL
+        LEFT JOIN card_progress cp ON cp.card_id = c.id AND cp.kid_id = ?
         WHERE d.deleted_at IS NULL
         GROUP BY d.id, d.name
         ORDER BY d.name
-    """)
+        """,
+        (kid_id,),
+    )
     deck_mastery = []
     for row in cursor.fetchall():
         total = row["total"] or 0

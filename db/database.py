@@ -8,6 +8,7 @@ from pathlib import Path
 
 from config import CONFIG_PATH
 from .schema import SCHEMA_SQL, INDEXES_SQL, SCHEMA_VERSION
+from utils.progress import compute_progress_from_reviews, upsert_card_progress
 
 CONFIG_DIR = Path.home() / ".memcoach"
 DB_PATH = CONFIG_DIR / "memcoach.db"
@@ -29,6 +30,7 @@ def init_db():
         ensure_deck_review_mode(conn)
         ensure_review_review_mode(conn)
         ensure_review_grading_fields(conn)
+        ensure_card_progress(conn)
         ensure_assignment_defaults(conn)
         ensure_deck_mastery_rules(conn)
         ensure_bible_verses_table(conn)
@@ -36,6 +38,53 @@ def init_db():
         conn.executescript(INDEXES_SQL)
         conn.commit()
     run_daily_backup()
+
+def ensure_card_progress(conn: sqlite3.Connection) -> None:
+    """Ensure card_progress table exists and backfill from reviews if empty."""
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='card_progress'"
+    )
+    if not cursor.fetchone():
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS card_progress (
+                kid_id INTEGER NOT NULL,
+                card_id INTEGER NOT NULL,
+                interval_days INTEGER NOT NULL DEFAULT 1,
+                due_date TEXT NOT NULL DEFAULT (date('now')),
+                ease_factor REAL NOT NULL DEFAULT 2.5,
+                streak INTEGER NOT NULL DEFAULT 0,
+                mastery_status TEXT NOT NULL DEFAULT 'new' CHECK(mastery_status IN ('new', 'learning', 'mastered')),
+                last_review_ts TEXT,
+                PRIMARY KEY (kid_id, card_id),
+                FOREIGN KEY (kid_id) REFERENCES kids (id) ON DELETE CASCADE,
+                FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE
+            )
+            """
+        )
+    cursor.execute("SELECT COUNT(*) FROM card_progress")
+    if (cursor.fetchone() or [0])[0]:
+        return
+    cursor.execute("SELECT DISTINCT kid_id, card_id FROM reviews")
+    pairs = cursor.fetchall()
+    if not pairs:
+        return
+    for row in pairs:
+        progress = compute_progress_from_reviews(conn, row["kid_id"], row["card_id"])
+        if not progress:
+            continue
+        upsert_card_progress(
+            conn,
+            kid_id=row["kid_id"],
+            card_id=row["card_id"],
+            interval_days=progress.interval_days,
+            due_date=progress.due_date,
+            ease_factor=progress.ease_factor,
+            streak=progress.streak,
+            mastery_status=progress.mastery_status,
+            last_review_ts=progress.last_review_ts,
+        )
 
 def ensure_card_mastery_status(conn: sqlite3.Connection) -> None:
     """Ensure cards table has mastery_status column for existing installs."""

@@ -54,10 +54,10 @@ async def restore_backup(file: UploadFile = File(...)):
                 raise HTTPException(status_code=400, detail="Backup manifest is missing")
             manifest = json.loads(zipf.read("manifest.json"))
             manifest_version = manifest.get("schema_version")
-            if manifest_version != SCHEMA_VERSION:
+            if manifest_version is None or manifest_version > SCHEMA_VERSION:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Schema version mismatch (expected {SCHEMA_VERSION}, got {manifest_version})",
+                    detail=f"Schema version mismatch (expected <= {SCHEMA_VERSION}, got {manifest_version})",
                 )
             if "memcoach.db" not in names or "config.toml" not in names:
                 raise HTTPException(status_code=400, detail="Backup missing required files")

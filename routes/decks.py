@@ -120,22 +120,47 @@ async def deck_detail(deck_id: int, request: Request, kid_id: Optional[int] = No
     )
     deck_tag_names = [row[0] for row in cursor.fetchall()]
     deck_tags_text = ", ".join(deck_tag_names)
-    cursor.execute("""
-        SELECT
-            c.id,
-            c.prompt,
-            c.mastery_status,
-            c.streak,
-            c.due_date,
-            c.position,
-            GROUP_CONCAT(t.name, ',') AS tags
-        FROM cards c
-        LEFT JOIN card_tags ct ON ct.card_id = c.id
-        LEFT JOIN tags t ON t.id = ct.tag_id
-        WHERE c.deck_id = ? AND c.deleted_at IS NULL
-        GROUP BY c.id
-        ORDER BY c.position, c.id
-    """, (deck_id,))
+    if kid_id is None:
+        cursor.execute(
+            """
+            SELECT
+                c.id,
+                c.prompt,
+                c.mastery_status,
+                c.streak,
+                c.due_date,
+                c.position,
+                GROUP_CONCAT(t.name, ',') AS tags
+            FROM cards c
+            LEFT JOIN card_tags ct ON ct.card_id = c.id
+            LEFT JOIN tags t ON t.id = ct.tag_id
+            WHERE c.deck_id = ? AND c.deleted_at IS NULL
+            GROUP BY c.id
+            ORDER BY c.position, c.id
+            """,
+            (deck_id,),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT
+                c.id,
+                c.prompt,
+                COALESCE(cp.mastery_status, c.mastery_status) AS mastery_status,
+                COALESCE(cp.streak, c.streak) AS streak,
+                COALESCE(cp.due_date, c.due_date) AS due_date,
+                c.position,
+                GROUP_CONCAT(t.name, ',') AS tags
+            FROM cards c
+            LEFT JOIN card_progress cp ON cp.card_id = c.id AND cp.kid_id = ?
+            LEFT JOIN card_tags ct ON ct.card_id = c.id
+            LEFT JOIN tags t ON t.id = ct.tag_id
+            WHERE c.deck_id = ? AND c.deleted_at IS NULL
+            GROUP BY c.id
+            ORDER BY c.position, c.id
+            """,
+            (kid_id, deck_id),
+        )
     cards = []
     for row in cursor.fetchall():
         card = dict(row)
@@ -153,9 +178,9 @@ async def deck_detail(deck_id: int, request: Request, kid_id: Optional[int] = No
         (deck_id,),
     )
     card_tags = [row[0] for row in cursor.fetchall()]
-    mastered = sum(1 for card in cards if card["mastery_status"] == "mastered")
-    total = len(cards)
-    percent_mastered = mastery_percent(mastered, total)
+    mastered = sum(1 for card in cards if card["mastery_status"] == "mastered") if kid_id else 0
+    total = len(cards) if kid_id else 0
+    percent_mastered = mastery_percent(mastered, total) if kid_id else 0.0
     return templates.TemplateResponse(
         "decks/detail.html",
         {

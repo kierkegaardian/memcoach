@@ -100,9 +100,10 @@ def _load_weekly_report(conn, week_start: date) -> dict:
 
     cursor.execute(
         """
-        SELECT COUNT(*)
-        FROM cards
-        WHERE mastery_status = 'mastered' AND deleted_at IS NULL
+        SELECT COUNT(DISTINCT cp.card_id)
+        FROM card_progress cp
+        JOIN cards c ON c.id = cp.card_id
+        WHERE cp.mastery_status = 'mastered' AND c.deleted_at IS NULL
         """,
     )
     mastered_total = cursor.fetchone()[0] or 0

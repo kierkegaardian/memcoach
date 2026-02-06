@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
 
@@ -69,3 +70,20 @@ def test_review_submit_renders_result_partial(tmp_path, monkeypatch):
     assert "<strong>Correct:</strong> 2" in body
     assert "Next Card" in body
     assert "bg-green-100" in body
+
+    with database.get_conn() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT interval_days, streak, mastery_status, due_date
+            FROM card_progress
+            WHERE kid_id = ? AND card_id = ?
+            """,
+            (kid_id, card_id),
+        )
+        row = cursor.fetchone()
+        assert row is not None
+        assert row["interval_days"] == 6
+        assert row["streak"] == 1
+        assert row["mastery_status"] == "learning"
+        assert row["due_date"] == (date.today() + timedelta(days=6)).isoformat()

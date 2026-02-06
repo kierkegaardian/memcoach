@@ -1,6 +1,6 @@
 # SQL schema for MemCoach database
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 SCHEMA_SQL = """
 -- Kids
@@ -79,6 +79,21 @@ CREATE TABLE IF NOT EXISTS cards (
     deleted_at TEXT,
     FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE,
     FOREIGN KEY (text_id) REFERENCES texts (id) ON DELETE SET NULL
+);
+
+-- Per-kid card progress (SM-2 fields)
+CREATE TABLE IF NOT EXISTS card_progress (
+    kid_id INTEGER NOT NULL,
+    card_id INTEGER NOT NULL,
+    interval_days INTEGER NOT NULL DEFAULT 1,
+    due_date TEXT NOT NULL DEFAULT (date('now')),
+    ease_factor REAL NOT NULL DEFAULT 2.5,
+    streak INTEGER NOT NULL DEFAULT 0,
+    mastery_status TEXT NOT NULL DEFAULT 'new' CHECK(mastery_status IN ('new', 'learning', 'mastered')),
+    last_review_ts TEXT,
+    PRIMARY KEY (kid_id, card_id),
+    FOREIGN KEY (kid_id) REFERENCES kids (id) ON DELETE CASCADE,
+    FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE
 );
 
 -- Card search (FTS5)
@@ -160,6 +175,8 @@ CREATE TABLE IF NOT EXISTS bible_verses (
 # Indexes for performance
 INDEXES_SQL = """
 CREATE INDEX IF NOT EXISTS idx_cards_due ON cards (due_date);
+CREATE INDEX IF NOT EXISTS idx_card_progress_kid_due ON card_progress (kid_id, due_date);
+CREATE INDEX IF NOT EXISTS idx_card_progress_card ON card_progress (card_id);
 CREATE INDEX IF NOT EXISTS idx_cards_deck ON cards (deck_id);
 CREATE INDEX IF NOT EXISTS idx_cards_text ON cards (text_id, chunk_index);
 CREATE INDEX IF NOT EXISTS idx_cards_deleted ON cards (deleted_at);
