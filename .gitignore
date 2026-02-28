@@ -14,3 +14,15 @@ Thumbs.db
 *.swp
 *.swo
 uvicorn.log
+
+# Android wrapper local artifacts
+android-wrapper/.gradle/
+android-wrapper/.gradle-bin/
+android-wrapper/.local-jdks/
+android-wrapper/app/build/
+android-wrapper/local.properties
+
+# Local runtime scratch dirs
+.bin/
+.run/
+.runtime/
