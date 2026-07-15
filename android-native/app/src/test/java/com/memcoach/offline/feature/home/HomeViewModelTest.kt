@@ -117,10 +117,43 @@ class HomeViewModelTest {
             viewModel.events.first(),
         )
     }
+
+    @Test
+    fun repositoryEmissionDoesNotRevertPendingKidSelection() = runTest {
+        val preferences = FakeAppPreferencesRepository(
+            initialPreferences = AppPreferences(selectedKidId = 1L),
+            persistSelections = false,
+        )
+        val kids = FakeKidRepository(
+            initialKids = listOf(Kid(id = 1L, name = "First"), Kid(id = 2L, name = "Second")),
+        )
+        val viewModel = HomeViewModel(
+            appPreferencesRepository = preferences,
+            kidRepository = kids,
+            deckRepository = FakeDeckRepository(),
+            cardRepository = FakeCardRepository(),
+        )
+        advanceUntilIdle()
+        assertEquals(1L, viewModel.state.value.selectedKidId)
+
+        viewModel.selectKid(2L)
+        advanceUntilIdle()
+        kids.setKids(
+            listOf(
+                Kid(id = 1L, name = "First"),
+                Kid(id = 2L, name = "Second"),
+                Kid(id = 3L, name = "Third"),
+            ),
+        )
+        advanceUntilIdle()
+
+        assertEquals(2L, viewModel.state.value.selectedKidId)
+    }
 }
 
 private class FakeAppPreferencesRepository(
     initialPreferences: AppPreferences = AppPreferences(),
+    private val persistSelections: Boolean = true,
 ) : AppPreferencesRepository {
     private val preferences = MutableStateFlow(initialPreferences)
 
@@ -141,11 +174,15 @@ private class FakeAppPreferencesRepository(
     override suspend fun verifyParentPin(pin: String): Boolean = pin == "1234"
 
     override suspend fun setSelectedKidId(kidId: Long?) {
-        preferences.update { it.copy(selectedKidId = kidId) }
+        if (persistSelections) {
+            preferences.update { it.copy(selectedKidId = kidId) }
+        }
     }
 
     override suspend fun setSelectedDeckId(deckId: Long?) {
-        preferences.update { it.copy(selectedDeckId = deckId) }
+        if (persistSelections) {
+            preferences.update { it.copy(selectedDeckId = deckId) }
+        }
     }
 }
 
@@ -177,6 +214,10 @@ private class FakeKidRepository(
         val nextId = (kids.value.maxOfOrNull { it.id } ?: 0L) + 1L
         kids.update { current -> current + Kid(id = nextId, name = cleanedName) }
         return nextId
+    }
+
+    fun setKids(value: List<Kid>) {
+        kids.value = value
     }
 }
 

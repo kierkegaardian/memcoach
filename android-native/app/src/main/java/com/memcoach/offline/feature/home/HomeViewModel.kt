@@ -256,14 +256,14 @@ class HomeViewModel(
     }
 
     private fun preferredKidId(current: HomeUiState, kids: List<Kid>, preferences: AppPreferences): Long? {
-        return preferences.selectedKidId?.takeIf { id -> kids.any { it.id == id } }
-            ?: current.selectedKidId?.takeIf { id -> kids.any { it.id == id } }
+        return current.selectedKidId?.takeIf { id -> kids.any { it.id == id } }
+            ?: preferences.selectedKidId?.takeIf { id -> kids.any { it.id == id } }
             ?: kids.firstOrNull()?.id
     }
 
     private fun preferredDeckId(current: HomeUiState, decks: List<Deck>, preferences: AppPreferences): Long? {
-        return preferences.selectedDeckId?.takeIf { id -> decks.any { it.id == id } }
-            ?: current.selectedDeckId?.takeIf { id -> decks.any { it.id == id } }
+        return current.selectedDeckId?.takeIf { id -> decks.any { it.id == id } }
+            ?: preferences.selectedDeckId?.takeIf { id -> decks.any { it.id == id } }
             ?: decks.firstOrNull()?.id
     }
 

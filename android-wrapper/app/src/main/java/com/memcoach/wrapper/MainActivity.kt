@@ -38,8 +38,8 @@ class MainActivity : AppCompatActivity() {
     ) { granted ->
         val request = pendingPermissionRequest
         pendingPermissionRequest = null
-        if (granted) {
-            request?.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+        if (granted && request != null && isTrustedAudioPermissionRequest(request)) {
+            request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
         } else {
             request?.deny()
         }
@@ -66,7 +66,7 @@ class MainActivity : AppCompatActivity() {
                 if (scheme != "http" && scheme != "https") {
                     return openExternalUrl(target)
                 }
-                if (ServerUrlPolicy.isAllowedWebHost(target, currentBaseUrl)) {
+                if (ServerUrlPolicy.isAllowedWebHost(target.toString(), currentBaseUrl)) {
                     return false
                 }
                 return openExternalUrl(target)
@@ -112,8 +112,7 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 val loaded = url ?: return
-                val loadedUri = Uri.parse(loaded)
-                if (ServerUrlPolicy.isAllowedWebHost(loadedUri, currentBaseUrl)) {
+                if (ServerUrlPolicy.isAllowedWebHost(loaded, currentBaseUrl)) {
                     allowUrlPromptLongPress = false
                 }
             }
@@ -123,7 +122,9 @@ class MainActivity : AppCompatActivity() {
             override fun onPermissionRequest(request: PermissionRequest) {
                 runOnUiThread {
                     val resources = request.resources
-                    if (resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                    if (!isTrustedAudioPermissionRequest(request)) {
+                        request.deny()
+                    } else if (resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
                         if (hasMicPermission()) {
                             request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
                         } else {
@@ -180,6 +181,11 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+    private fun isTrustedAudioPermissionRequest(request: PermissionRequest): Boolean {
+        return request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE) &&
+            ServerUrlPolicy.isAllowedWebHost(request.origin.toString(), currentBaseUrl)
+    }
+
     private fun hasMicPermission(): Boolean {
         return ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
@@ -190,11 +196,9 @@ class MainActivity : AppCompatActivity() {
             .getString(baseUrlPrefKey, defaultStartUrl)
             ?.trim()
             .orEmpty()
-        return if (stored.isEmpty()) {
-            defaultStartUrl
-        } else {
-            stored
-        }
+        return ServerUrlPolicy.normalizeBaseUrl(stored)
+            ?: ServerUrlPolicy.normalizeBaseUrl(defaultStartUrl)
+            ?: "http://127.0.0.1:8000"
     }
 
     private fun saveBaseUrl(url: String) {

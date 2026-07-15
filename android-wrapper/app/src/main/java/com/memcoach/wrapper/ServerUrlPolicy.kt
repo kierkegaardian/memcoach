@@ -1,6 +1,7 @@
 package com.memcoach.wrapper
 
-import android.net.Uri
+import java.net.URI
+import java.net.URISyntaxException
 
 object ServerUrlPolicy {
     fun normalizeBaseUrl(raw: String): String? {
@@ -9,33 +10,33 @@ object ServerUrlPolicy {
             return null
         }
         val withScheme =
-            if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+            if (
+                trimmed.startsWith("http://", ignoreCase = true) ||
+                trimmed.startsWith("https://", ignoreCase = true)
+            ) {
                 trimmed
             } else if (isLoopbackInput(trimmed)) {
                 "http://$trimmed"
             } else {
                 "https://$trimmed"
             }
-        val parsed = Uri.parse(withScheme)
-        val scheme = parsed.scheme?.lowercase()
-        val host = parsed.host?.lowercase()
+        val parsed = parseStrictWebUri(withScheme) ?: return null
+        val scheme = parsed.scheme.lowercase()
+        val host = parsed.host.lowercase()
         return when {
-            host.isNullOrBlank() -> null
             scheme == "https" -> withScheme
             scheme == "http" && isLoopbackHost(host) -> withScheme
             else -> null
         }
     }
 
-    fun isAllowedWebHost(target: Uri, currentBaseUrl: String): Boolean {
-        val targetScheme = target.scheme?.lowercase() ?: return false
-        if (targetScheme != "http" && targetScheme != "https") {
-            return false
-        }
-        val currentUri = Uri.parse(currentBaseUrl)
-        val currentScheme = currentUri.scheme?.lowercase() ?: return false
-        val currentHost = currentUri.host?.lowercase() ?: return false
-        val targetHost = target.host?.lowercase() ?: return false
+    fun isAllowedWebHost(targetUrl: String, currentBaseUrl: String): Boolean {
+        val target = parseStrictWebUri(targetUrl) ?: return false
+        val currentUri = parseStrictWebUri(currentBaseUrl) ?: return false
+        val targetScheme = target.scheme.lowercase()
+        val currentScheme = currentUri.scheme.lowercase()
+        val currentHost = currentUri.host.lowercase()
+        val targetHost = target.host.lowercase()
         if (currentScheme != targetScheme || currentHost != targetHost) {
             return false
         }
@@ -49,11 +50,11 @@ object ServerUrlPolicy {
         return statusCode in setOf(502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 530)
     }
 
-    private fun resolvePort(uri: Uri): Int {
+    private fun resolvePort(uri: URI): Int {
         if (uri.port != -1) {
             return uri.port
         }
-        return when (uri.scheme?.lowercase()) {
+        return when (uri.scheme.lowercase()) {
             "https" -> 443
             "http" -> 80
             else -> -1
@@ -68,5 +69,25 @@ object ServerUrlPolicy {
 
     private fun isLoopbackHost(host: String): Boolean {
         return host == "localhost" || host == "127.0.0.1"
+    }
+
+    private fun parseStrictWebUri(raw: String): URI? {
+        if ('\\' in raw) {
+            return null
+        }
+        val parsed =
+            try {
+                URI(raw)
+            } catch (_: URISyntaxException) {
+                return null
+            }
+        val scheme = parsed.scheme?.lowercase() ?: return null
+        if (scheme != "http" && scheme != "https") {
+            return null
+        }
+        if (parsed.host.isNullOrBlank() || parsed.rawUserInfo != null) {
+            return null
+        }
+        return parsed
     }
 }

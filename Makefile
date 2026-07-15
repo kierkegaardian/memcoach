@@ -20,7 +20,7 @@ android-debug:
 	cd android-native && ./gradlew17 :core-scheduling:test :core-grading:test :app:testDebugUnitTest :app:assembleDebug --no-daemon
 
 android-wrapper-debug:
-	cd android-native && ./gradlew17 -p ../android-wrapper :app:assembleDebug --no-daemon
+	cd android-native && ./gradlew17 -p ../android-wrapper :app:testDebugUnitTest :app:assembleDebug --no-daemon
 
 android-install-usb:
 	adb install -r android-native/app/build/outputs/apk/debug/app-debug.apk

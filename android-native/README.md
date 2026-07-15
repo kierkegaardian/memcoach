@@ -101,7 +101,7 @@ cd android-native
 ./gradlew17 :app:bundleRelease
 ```
 
-If signing variables are not set, Gradle may build an unsigned release artifact, but it will not substitute the debug key. If any signing variable is set, all four are required.
+Release tasks fail unless all four signing variables are set. Debug builds do not require signing variables, and release builds never fall back to the debug key.
 
 ## Boox Palma deployment notes
 

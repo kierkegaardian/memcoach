@@ -12,7 +12,16 @@ val uploadSigningValues = listOf(uploadStoreFile, uploadStorePassword, uploadKey
 val hasUploadSigning = uploadSigningValues.all { !it.isNullOrBlank() }
 
 if (uploadSigningValues.any { !it.isNullOrBlank() } && !hasUploadSigning) {
-    throw GradleException("Set all MEMCOACH_UPLOAD_* signing variables or leave all of them unset.")
+    throw GradleException("Set all MEMCOACH_UPLOAD_* signing variables.")
+}
+
+gradle.taskGraph.whenReady {
+    val buildsRelease = allTasks.any { task ->
+        task.project == project && task.name.contains("release", ignoreCase = true)
+    }
+    if (buildsRelease && !hasUploadSigning) {
+        throw GradleException("Release builds require all MEMCOACH_UPLOAD_* signing variables.")
+    }
 }
 
 android {

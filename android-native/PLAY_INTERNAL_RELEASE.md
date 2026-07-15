@@ -17,6 +17,8 @@ source .secrets/upload-keystore.env
 ./gradlew17 :app:bundleRelease :app:assembleRelease :app:assembleDebug
 ```
 
+Release tasks fail closed unless all four `MEMCOACH_UPLOAD_*` variables are present. Use an absolute path for `MEMCOACH_UPLOAD_STORE_FILE` when reusing the same signing environment for `android-wrapper`.
+
 ## 2) Phone push for immediate testing
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
