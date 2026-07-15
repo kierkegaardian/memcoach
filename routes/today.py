@@ -167,7 +167,7 @@ def build_today_queue(
     queue_cards: List[Dict] = []
     assignment_summaries: List[Dict] = []
     for assignment in assignments:
-        is_recitation = (assignment.get("review_mode") or "free_recall") == "recitation"
+        is_recitation = (assignment["review_mode"] or "free_recall") == "recitation"
         active = assignment_is_active(assignment, today) and (allow_recitation or not is_recitation)
         deck_cards: List[Dict] = []
         new_count = 0
@@ -284,7 +284,7 @@ async def today_next_card(kid_id: int, request: Request, conn=Depends(get_db)):
             {"request": request, "kid_id": kid_id},
         )
     card = queue_cards[0]
-    review_mode = card.get("review_mode") or "free_recall"
+    review_mode = card["review_mode"] or "free_recall"
     hint_text = build_hint_text(card["full_text"], hint_mode) if review_mode == "free_recall" else ""
     masked_text = build_cloze_text(card["full_text"]) if review_mode == "cloze" else ""
     initials_text = build_first_letters_text(card["full_text"]) if review_mode == "first_letters" else ""

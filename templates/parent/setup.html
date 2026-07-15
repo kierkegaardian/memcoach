@@ -20,7 +20,7 @@
         </div>
     {% endif %}
     <form method="post" action="/parent/setup" class="space-y-4">
-        <input type="hidden" name="next_path" value="{{ request.url.path }}">
+        <input type="hidden" name="next_path" value="{{ next_path or request.url.path }}">
         <div>
             <label for="pin" class="block text-sm font-semibold text-gray-700 mb-1">Parent PIN</label>
             <input id="pin" name="pin" type="password" inputmode="numeric" autocomplete="off" class="w-full rounded border border-gray-300 px-3 py-2" required>

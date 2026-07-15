@@ -203,3 +203,7 @@ def test_start_review_recitation_requires_configured_parent_unlock(
     response = client.get(f"/review/{kid_id}/{deck_id}")
     assert response.status_code == 200
     assert "Parent Key Required" in response.text
+    if configure_pin:
+        assert "Unlock Parent Mode" in response.text
+    else:
+        assert f"/parent/setup?next_path=/review/{kid_id}/{deck_id}" in response.text

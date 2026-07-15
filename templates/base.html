@@ -72,7 +72,7 @@
                 if (!(form instanceof HTMLFormElement)) {
                     return;
                 }
-                if ((form.method || "").toLowerCase() !== "post") {
+                if ((form.getAttribute("method") || "").toLowerCase() !== "post") {
                     return;
                 }
                 ensureCsrfInput(form);

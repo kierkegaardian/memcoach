@@ -10,10 +10,17 @@
             {{ deck.name }} is a parent-led recitation deck for {{ kid.name }}.
         </p>
         <p class="text-amber-800 mb-6">
-            Unlock Parent Mode in the top bar, then start this review again.
+            {% if request.state.parent_pin_configured %}
+                Unlock Parent Mode in the top bar, then start this review again.
+            {% else %}
+                Set a Parent PIN first. MemCoach will unlock Parent Mode and return to this review.
+            {% endif %}
         </p>
         <div class="flex flex-wrap gap-3">
             <a href="/kid-mode/{{ kid_id }}" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Back to Kid Decks</a>
+            {% if not request.state.parent_pin_configured %}
+                <a href="/parent/setup?next_path=/review/{{ kid_id }}/{{ deck_id }}" class="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700">Set Parent PIN</a>
+            {% endif %}
             <a href="/review/{{ kid_id }}/{{ deck_id }}" class="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700">Try Again</a>
         </div>
     </div>

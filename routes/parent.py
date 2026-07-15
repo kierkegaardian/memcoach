@@ -65,7 +65,7 @@ async def parent_status(request: Request):
 
 
 @router.get("/setup", response_class=HTMLResponse)
-async def setup_parent_pin(request: Request):
+async def setup_parent_pin(request: Request, next_path: str = "/"):
     pin_hash = get_parent_pin_hash()
     configured = bool(pin_hash)
     if configured and not is_parent_unlocked(request):
@@ -73,7 +73,12 @@ async def setup_parent_pin(request: Request):
     return templates.TemplateResponse(
         request,
         "parent/setup.html",
-        {"request": request, "configured": configured, "error": None},
+        {
+            "request": request,
+            "configured": configured,
+            "error": None,
+            "next_path": sanitize_next_path(next_path),
+        },
     )
 
 
@@ -96,6 +101,7 @@ async def save_parent_pin(
                 "request": request,
                 "configured": bool(pin_hash_existing),
                 "error": "PIN entries do not match.",
+                "next_path": safe_next_path,
             },
             status_code=status.HTTP_400_BAD_REQUEST,
         )
@@ -109,6 +115,7 @@ async def save_parent_pin(
                 "request": request,
                 "configured": bool(pin_hash_existing),
                 "error": str(exc),
+                "next_path": safe_next_path,
             },
             status_code=status.HTTP_400_BAD_REQUEST,
         )
