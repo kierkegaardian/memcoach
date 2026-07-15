@@ -109,6 +109,14 @@ def is_parent_unlocked(request: Request) -> bool:
     pin_hash = get_parent_pin_hash()
     if not pin_hash:
         return True
+    return is_parent_supervision_active(request)
+
+
+def is_parent_supervision_active(request: Request) -> bool:
+    """Return whether a configured PIN has been unlocked for this request."""
+    pin_hash = get_parent_pin_hash()
+    if not pin_hash:
+        return False
     cookie_value = request.cookies.get(SESSION_COOKIE_NAME)
     return verify_parent_session_cookie(cookie_value, pin_hash)
 
@@ -117,3 +125,9 @@ def require_parent_session(request: Request) -> None:
     if is_parent_unlocked(request):
         return None
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Parent session required")
+
+
+def require_parent_supervision(request: Request) -> None:
+    if is_parent_supervision_active(request):
+        return None
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Parent supervision required")

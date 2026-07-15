@@ -18,7 +18,8 @@ from utils.hints import (
 from utils.mastery import mastery_status_from_rules, get_deck_mastery_rules
 from utils.sm2 import map_grade_to_quality, update_sm2
 from utils.progress import default_progress, get_card_progress, upsert_card_progress
-from utils.auth import require_parent_session
+from utils.assignments import has_enabled_assignment
+from utils.auth import require_parent_supervision
 from config import load_config
 
 router = APIRouter()
@@ -82,7 +83,8 @@ def fetch_assignments(conn, kid_id: int) -> List[Dict]:
             a.new_cap,
             a.review_cap,
             a.paused_until,
-            d.name AS deck_name
+            d.name AS deck_name,
+            d.review_mode
         FROM assignments a
         JOIN decks d ON d.id = a.deck_id
         WHERE a.kid_id = ? AND d.deleted_at IS NULL
@@ -154,13 +156,19 @@ def apply_caps(cards: List[Dict], new_cap: Optional[int], review_cap: Optional[i
     return selected, len(new_cards), len(review_cards)
 
 
-def build_today_queue(conn, kid_id: int) -> Tuple[List[Dict], List[Dict]]:
+def build_today_queue(
+    conn,
+    kid_id: int,
+    *,
+    allow_recitation: bool = False,
+) -> Tuple[List[Dict], List[Dict]]:
     today = date.today()
     assignments = fetch_assignments(conn, kid_id)
     queue_cards: List[Dict] = []
     assignment_summaries: List[Dict] = []
     for assignment in assignments:
-        active = assignment_is_active(assignment, today)
+        is_recitation = (assignment.get("review_mode") or "free_recall") == "recitation"
+        active = assignment_is_active(assignment, today) and (allow_recitation or not is_recitation)
         deck_cards: List[Dict] = []
         new_count = 0
         review_count = 0
@@ -220,7 +228,11 @@ async def today_view(kid_id: int, request: Request, conn=Depends(get_db)):
     if not kid_row:
         raise HTTPException(status_code=404, detail="Kid not found")
     kid = {"id": kid_row[0], "name": kid_row[1]}
-    assignments, queue_cards = build_today_queue(conn, kid_id)
+    assignments, queue_cards = build_today_queue(
+        conn,
+        kid_id,
+        allow_recitation=getattr(request.state, "parent_supervision_active", False),
+    )
     total_due = len(queue_cards)
     avg_duration = get_recent_avg_duration(conn, kid_id)
     estimated_seconds = total_due * avg_duration
@@ -241,7 +253,11 @@ async def today_view(kid_id: int, request: Request, conn=Depends(get_db)):
 
 @router.get("/today/{kid_id}/queue", response_class=HTMLResponse)
 async def today_queue(kid_id: int, request: Request, conn=Depends(get_db)):
-    assignments, queue_cards = build_today_queue(conn, kid_id)
+    assignments, queue_cards = build_today_queue(
+        conn,
+        kid_id,
+        allow_recitation=getattr(request.state, "parent_supervision_active", False),
+    )
     return templates.TemplateResponse(
         request,
         "partials/today_queue.html",
@@ -256,7 +272,11 @@ async def today_queue(kid_id: int, request: Request, conn=Depends(get_db)):
 @router.get("/today/{kid_id}/next", response_class=HTMLResponse)
 async def today_next_card(kid_id: int, request: Request, conn=Depends(get_db)):
     hint_mode = normalize_hint_mode(request.query_params.get("hint_mode"))
-    assignments, queue_cards = build_today_queue(conn, kid_id)
+    assignments, queue_cards = build_today_queue(
+        conn,
+        kid_id,
+        allow_recitation=getattr(request.state, "parent_supervision_active", False),
+    )
     if not queue_cards:
         return templates.TemplateResponse(
             request,
@@ -302,6 +322,8 @@ async def submit_today_review(
 ):
     config = load_config()
     cursor = conn.cursor()
+    if not has_enabled_assignment(conn, kid_id=kid_id, deck_id=deck_id):
+        raise HTTPException(status_code=404, detail="Enabled assignment not found")
     cursor.execute(
         """
         SELECT c.*, d.review_mode
@@ -321,7 +343,7 @@ async def submit_today_review(
     hint_mode = normalize_hint_mode(hint_mode)
     review_mode = card.get("review_mode") or "free_recall"
     if review_mode == "recitation":
-        require_parent_session(request)
+        require_parent_supervision(request)
         if parent_grade is None:
             raise HTTPException(status_code=400, detail="Parent grade required")
         try:

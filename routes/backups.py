@@ -4,6 +4,7 @@ import shutil
 import sqlite3
 import tempfile
 import zipfile
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,6 +28,15 @@ from utils.uploads import UploadTooLargeError, read_upload_limited
 router = APIRouter(dependencies=[Depends(require_parent_session)])
 base_dir = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
+
+
+def restore_database_from(source_path: Path) -> None:
+    """Restore into the live database through SQLite's online backup API."""
+    with closing(sqlite3.connect(source_path)) as source_conn:
+        with closing(sqlite3.connect(DB_PATH, timeout=5)) as destination_conn:
+            destination_conn.execute("PRAGMA busy_timeout = 5000")
+            source_conn.backup(destination_conn)
+
 
 @router.get("/backup/manage", response_class=HTMLResponse)
 async def backup_admin(request: Request):
@@ -94,35 +104,24 @@ async def restore_backup(file: UploadFile = File(...)):
                 finally:
                     if test_conn is not None:
                         test_conn.close()
-                staged_db = DB_PATH.with_suffix(".db.restore")
                 staged_config = CONFIG_PATH.with_suffix(".toml.restore")
-                shutil.copy2(temp_db, staged_db)
                 shutil.copy2(temp_config, staged_config)
-                original_db_backup = DB_PATH.with_suffix(".db.pre_restore")
                 original_config_backup = CONFIG_PATH.with_suffix(".toml.pre_restore")
-                db_exists = DB_PATH.exists()
                 cfg_exists = CONFIG_PATH.exists()
+                original_config_backup.unlink(missing_ok=True)
+                if cfg_exists:
+                    shutil.copy2(CONFIG_PATH, original_config_backup)
                 try:
-                    if db_exists:
-                        DB_PATH.with_suffix(".db-wal").unlink(missing_ok=True)
-                        DB_PATH.with_suffix(".db-shm").unlink(missing_ok=True)
-                        DB_PATH.replace(original_db_backup)
-                    if cfg_exists:
-                        CONFIG_PATH.replace(original_config_backup)
-                    staged_db.replace(DB_PATH)
                     staged_config.replace(CONFIG_PATH)
-                    DB_PATH.with_suffix(".db-wal").unlink(missing_ok=True)
-                    DB_PATH.with_suffix(".db-shm").unlink(missing_ok=True)
-                except OSError as exc:
-                    if original_db_backup.exists():
-                        original_db_backup.replace(DB_PATH)
+                    restore_database_from(temp_db)
+                except (OSError, sqlite3.Error) as exc:
                     if original_config_backup.exists():
                         original_config_backup.replace(CONFIG_PATH)
-                    staged_db.unlink(missing_ok=True)
+                    elif not cfg_exists:
+                        CONFIG_PATH.unlink(missing_ok=True)
                     staged_config.unlink(missing_ok=True)
-                    raise HTTPException(status_code=500, detail=f"Restore failed safely: {exc}") from exc
+                    raise HTTPException(status_code=500, detail="Restore failed safely") from exc
                 else:
-                    original_db_backup.unlink(missing_ok=True)
                     original_config_backup.unlink(missing_ok=True)
     except zipfile.BadZipFile as exc:
         raise HTTPException(status_code=400, detail="Invalid zip archive") from exc

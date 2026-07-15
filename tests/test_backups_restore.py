@@ -64,6 +64,7 @@ def _prepare_env(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "CONFIG_DIR", config_dir)
     monkeypatch.setattr(config, "CONFIG_PATH", config_path)
     monkeypatch.setattr(database, "CONFIG_DIR", config_dir)
+    monkeypatch.setattr(database, "CONFIG_PATH", config_path)
     monkeypatch.setattr(database, "DB_PATH", db_path)
     monkeypatch.setattr(backups, "CONFIG_PATH", config_path)
     monkeypatch.setattr(backups, "DB_PATH", db_path)
@@ -104,17 +105,14 @@ def test_restore_rejects_invalid_db_payload(tmp_path, monkeypatch):
         app.dependency_overrides.clear()
 
 
-def test_restore_rolls_back_on_replace_failure(tmp_path, monkeypatch):
+def test_restore_rolls_back_config_on_database_failure(tmp_path, monkeypatch):
     _prepare_env(tmp_path, monkeypatch)
     app.dependency_overrides[require_parent_session] = lambda: None
-    original_replace = Path.replace
 
-    def failing_replace(self: Path, target: Path) -> Path:
-        if self.name.endswith(".db.restore"):
-            raise OSError("simulated replace failure")
-        return original_replace(self, target)
+    def failing_restore(_source_path: Path) -> None:
+        raise sqlite3.OperationalError("simulated backup failure")
 
-    monkeypatch.setattr(Path, "replace", failing_replace)
+    monkeypatch.setattr(backups, "restore_database_from", failing_restore)
     try:
         client = TestClient(app)
         headers = _csrf_headers(client)
@@ -128,9 +126,52 @@ def test_restore_rolls_back_on_replace_failure(tmp_path, monkeypatch):
         assert response.status_code == 500
         assert "Restore failed safely" in response.json()["detail"]
         db_path = tmp_path / ".memcoach" / "memcoach.db"
-        assert db_path.exists()
-        assert not db_path.with_suffix(".db.pre_restore").exists()
-        assert not db_path.with_suffix(".db.restore").exists()
-        assert db_path.stat().st_size > 0
+        with sqlite3.connect(db_path) as conn:
+            marker = conn.execute("SELECT value FROM marker").fetchone()
+        assert marker == ("original",)
+        config_text = (tmp_path / ".memcoach" / "config.toml").read_text(encoding="utf-8")
+        assert "stt_audio_max_bytes = 26214400" in config_text
     finally:
         app.dependency_overrides.clear()
+
+
+def test_restore_uses_online_backup_while_existing_connection_is_open(tmp_path, monkeypatch):
+    _prepare_env(tmp_path, monkeypatch)
+    app.dependency_overrides[require_parent_session] = lambda: None
+    db_path = tmp_path / ".memcoach" / "memcoach.db"
+    open_conn = sqlite3.connect(db_path)
+    try:
+        assert open_conn.execute("SELECT value FROM marker").fetchone() == ("original",)
+        client = TestClient(app)
+        headers = _csrf_headers(client)
+        payload = _make_zip(
+            _make_sqlite_bytes("restored"),
+            "[uploads]\nbackup_restore_max_bytes=20971520\n",
+        )
+        response = client.post(
+            "/admin/restore",
+            files={"file": ("backup.zip", payload, "application/zip")},
+            headers=headers,
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 303
+        assert open_conn.execute("SELECT value FROM marker").fetchone() == ("restored",)
+    finally:
+        open_conn.close()
+        app.dependency_overrides.clear()
+
+
+def test_backup_archive_includes_committed_wal_data(tmp_path, monkeypatch):
+    _prepare_env(tmp_path, monkeypatch)
+    with database.get_conn() as open_conn:
+        open_conn.execute("UPDATE marker SET value = 'from-wal'")
+        open_conn.commit()
+        archive = database.create_backup_archive_bytes(SCHEMA_VERSION)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with zipfile.ZipFile(io.BytesIO(archive)) as zipf:
+            zipf.extract("memcoach.db", tmpdir)
+        with sqlite3.connect(Path(tmpdir) / "memcoach.db") as backup_conn:
+            marker = backup_conn.execute("SELECT value FROM marker").fetchone()
+    assert marker == ("from-wal",)

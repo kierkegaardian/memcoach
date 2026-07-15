@@ -22,7 +22,7 @@ templates = Jinja2Templates(directory=str(base_dir / "templates"))
 
 def sanitize_next_path(next_path: str) -> str:
     candidate = (next_path or "").strip()
-    if not candidate.startswith("/") or candidate.startswith("//"):
+    if "\\" in candidate or not candidate.startswith("/") or candidate.startswith("//"):
         return "/"
     parsed = urlsplit(candidate)
     if parsed.scheme or parsed.netloc:

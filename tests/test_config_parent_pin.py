@@ -44,6 +44,7 @@ def test_set_parent_pin_hash_adds_section_when_missing(tmp_path, monkeypatch):
 def test_sanitize_next_path_blocks_external_and_protocol_relative():
     assert sanitize_next_path("https://evil.example/path") == "/"
     assert sanitize_next_path("//evil.example/path") == "/"
+    assert sanitize_next_path("/\\evil.example/path") == "/"
     assert sanitize_next_path("/kids") == "/kids"
 
 

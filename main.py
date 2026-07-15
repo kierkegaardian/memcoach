@@ -17,7 +17,7 @@ sys.path.insert(0, str(base_dir))
 from db.database import init_db
 from config import load_config
 from routes import kids, decks, cards, review, stats, plan, backups, trash, search, parent, kid_mode, today, reports, stt, bible  # Import routers
-from utils.auth import is_parent_unlocked, get_parent_pin_hash
+from utils.auth import get_parent_pin_hash, is_parent_supervision_active, is_parent_unlocked
 from utils.csrf import (
     CSRF_COOKIE_NAME,
     generate_csrf_token,
@@ -50,6 +50,7 @@ app.include_router(bible.router, tags=["bible"])
 async def parent_session_middleware(request: Request, call_next):
     request.state.parent_unlocked = is_parent_unlocked(request)
     request.state.parent_pin_configured = bool(get_parent_pin_hash())
+    request.state.parent_supervision_active = is_parent_supervision_active(request)
     csrf_token = request.cookies.get(CSRF_COOKIE_NAME) or generate_csrf_token()
     request.state.csrf_token = csrf_token
     try:

@@ -20,7 +20,8 @@ from utils.progress import (
     upsert_card_progress,
 )
 from config import load_config
-from utils.auth import require_parent_session
+from utils.assignments import has_enabled_assignment
+from utils.auth import require_parent_session, require_parent_supervision
 from utils.search import normalize_fts_query
 from typing import Optional, Dict, List
 from datetime import datetime, timezone
@@ -140,7 +141,13 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
     if not deck_row:
         raise HTTPException(status_code=404, detail="Deck not found")
     deck = {"id": deck_row[0], "name": deck_row[1], "review_mode": deck_row[2] or "free_recall"}
-    if deck["review_mode"] == "recitation" and not getattr(request.state, "parent_unlocked", False):
+    if not has_enabled_assignment(conn, kid_id=kid_id, deck_id=deck_id):
+        raise HTTPException(status_code=404, detail="Enabled assignment not found")
+    if deck["review_mode"] == "recitation" and not getattr(
+        request.state,
+        "parent_supervision_active",
+        False,
+    ):
         return templates.TemplateResponse(
             request,
             "review_parent_required.html",
@@ -209,12 +216,16 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
 @router.get("/next")
 async def next_card(kid_id: int, deck_id: int, request: Request, conn = Depends(get_db)):
     """HTMX endpoint for next card partial."""
+    if not has_enabled_assignment(conn, kid_id=kid_id, deck_id=deck_id):
+        raise HTTPException(status_code=404, detail="Enabled assignment not found")
     hint_mode = normalize_hint_mode(request.query_params.get("hint_mode"))
     group_texts = request.query_params.get("group_texts") == "1"
     apply_filters = request.query_params.get("apply_filters") == "1"
     search_query = (request.query_params.get("q") or "").strip()
     selected_tags = [tag for tag in request.query_params.getlist("tag") if tag]
     review_mode = get_deck_review_mode(conn, deck_id)
+    if review_mode == "recitation":
+        require_parent_supervision(request)
     card = get_next_card_for_review(
         kid_id,
         deck_id,
@@ -289,6 +300,8 @@ async def submit_review(
     deck_row = cursor.fetchone()
     if not deck_row:
         raise HTTPException(status_code=404, detail="Deck not found")
+    if not has_enabled_assignment(conn, kid_id=kid_id, deck_id=deck_id):
+        raise HTTPException(status_code=404, detail="Enabled assignment not found")
     review_mode = deck_row[0] or "free_recall"
     cursor.execute("SELECT * FROM cards WHERE id = ? AND deleted_at IS NULL", (card_id,))
     card_row = cursor.fetchone()
@@ -300,7 +313,7 @@ async def submit_review(
     full_text = card['full_text']
     hint_mode = normalize_hint_mode(hint_mode)
     if review_mode == "recitation":
-        require_parent_session(request)
+        require_parent_supervision(request)
         if parent_grade is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Parent grade required")
         try:

@@ -1,8 +1,9 @@
 import io
 import json
 import sqlite3
+import tempfile
 import zipfile
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -277,6 +278,15 @@ def build_backup_manifest(schema_version: int) -> dict:
         "schema_version": schema_version,
     }
 
+
+def create_database_snapshot(destination: Path) -> None:
+    """Write a transactionally consistent SQLite snapshot to ``destination``."""
+    destination.unlink(missing_ok=True)
+    with get_conn() as source_conn:
+        with closing(sqlite3.connect(destination)) as destination_conn:
+            source_conn.backup(destination_conn)
+
+
 def create_backup_archive_bytes(schema_version: int) -> bytes:
     """Create a backup zip archive in memory."""
     if not DB_PATH.exists():
@@ -285,10 +295,13 @@ def create_backup_archive_bytes(schema_version: int) -> bytes:
         raise FileNotFoundError("config.toml not found")
     manifest = build_backup_manifest(schema_version)
     buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
-        zipf.writestr("manifest.json", json.dumps(manifest, indent=2))
-        zipf.write(DB_PATH, arcname="memcoach.db")
-        zipf.write(CONFIG_PATH, arcname="config.toml")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        snapshot_path = Path(tmpdir) / "memcoach.db"
+        create_database_snapshot(snapshot_path)
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
+            zipf.writestr("manifest.json", json.dumps(manifest, indent=2))
+            zipf.write(snapshot_path, arcname="memcoach.db")
+            zipf.write(CONFIG_PATH, arcname="config.toml")
     buffer.seek(0)
     return buffer.read()
 
@@ -300,10 +313,13 @@ def create_backup_archive_file(destination: Path, schema_version: int) -> None:
         raise FileNotFoundError("config.toml not found")
     manifest = build_backup_manifest(schema_version)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
-        zipf.writestr("manifest.json", json.dumps(manifest, indent=2))
-        zipf.write(DB_PATH, arcname="memcoach.db")
-        zipf.write(CONFIG_PATH, arcname="config.toml")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        snapshot_path = Path(tmpdir) / "memcoach.db"
+        create_database_snapshot(snapshot_path)
+        with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
+            zipf.writestr("manifest.json", json.dumps(manifest, indent=2))
+            zipf.write(snapshot_path, arcname="memcoach.db")
+            zipf.write(CONFIG_PATH, arcname="config.toml")
 
 def run_daily_backup() -> None:
     """Create a daily rolling backup of the DB/config and prune old archives."""
