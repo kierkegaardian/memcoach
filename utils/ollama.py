@@ -1,6 +1,5 @@
 import subprocess
 from typing import Optional
-import os
 from config import load_config
 
 def call_llm(prompt: str, model: str = None, timeout: int = 15) -> Optional[str]:
@@ -24,7 +23,7 @@ def call_llm(prompt: str, model: str = None, timeout: int = 15) -> Optional[str]
         print(f"Ollama call failed: {e}. Falling back to Levenshtein grading.")
         return None
 
-def grade_with_llm(full_text: str, user_text: str, config: dict = None) -> str:
+def grade_with_llm(full_text: str, user_text: str, config: dict = None) -> Optional[str]:
     """Use LLM to grade borderline cases."""
     if not config:
         config = load_config()
@@ -46,4 +45,4 @@ Response:"""
             return 'good'
         else:
             return 'fail'
-    return 'good'  # Fallback
+    return None

@@ -38,13 +38,29 @@ def _mask_words_every_nth(text: str, nth: int) -> str:
 
 
 def _first_letters(text: str) -> str:
+    def first_visible_initial(part: str) -> str:
+        match = re.search(r"[A-Za-z0-9]", part)
+        if match:
+            return match.group(0).upper()
+        return part[:1].upper() if part else ""
+
+    def initials_for_token(token: str) -> str:
+        pieces = re.split(r"([\-–—])", token)
+        output: List[str] = []
+        for piece in pieces:
+            if piece in {"-", "–", "—"}:
+                output.append(piece)
+            elif piece:
+                output.append(first_visible_initial(piece))
+        return "".join(output)
+
     tokens = re.split(r"(\s+)", text)
     initials = []
     for token in tokens:
         if not token or token.isspace():
             initials.append(token)
         else:
-            initials.append(token[0])
+            initials.append(initials_for_token(token))
     return "".join(initials).strip()
 
 

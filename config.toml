@@ -11,7 +11,7 @@ levenshtein_good_threshold = 0.85
 use_llm_on_borderline = true
 
 [parent]
-# Store a hashed PIN (generate with utils.auth.hash_pin) to unlock admin routes.
+# Parent routes remain available for first-run setup until a PIN is configured.
 pin_hash = ""
 # Optional: minutes to keep the parent session cookie valid.
 session_minutes = 30
@@ -30,3 +30,9 @@ no_speech_threshold = 0.6
 log_prob_threshold = -1.0
 fallback_no_speech_threshold = 0.9
 fallback_log_prob_threshold = -5.0
+
+[uploads]
+# Maximum request payload sizes for user-uploaded files.
+backup_restore_max_bytes = 20971520
+stt_audio_max_bytes = 26214400
+cards_txt_max_bytes = 5242880

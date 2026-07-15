@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ request.state.csrf_token }}">
     <title>{% block title %}MemCoach - Local-First Memorization{% endblock %}</title>
     <script src="{{ url_for('static', path='vendor/htmx.min.js') }}"></script>
     <script src="{{ url_for('static', path='vendor/tailwindcss.js') }}"></script>
@@ -33,7 +34,7 @@
                             <input type="hidden" name="next_path" value="{{ request.url.path }}">
                             <label for="parent-pin" class="sr-only">Parent PIN</label>
                             <input id="parent-pin" name="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Parent PIN" class="rounded px-3 py-1 text-gray-900 text-sm" required>
-                            <button type="submit" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-3 py-1 rounded-md">Unlock</button>
+                            <button type="submit" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-3 py-1 rounded-md">Parent Mode</button>
                         </form>
                     {% endif %}
                 {% else %}
@@ -45,6 +46,42 @@
     <main class="container mx-auto p-6">
         {% block content %}{% endblock %}
     </main>
+    <script>
+        (function () {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
+            if (!csrfToken) {
+                return;
+            }
+            document.body.addEventListener("htmx:configRequest", function (event) {
+                event.detail.headers["x-csrf-token"] = csrfToken;
+            });
+            const forms = document.querySelectorAll('form[method="post"], form[method="POST"]');
+            forms.forEach(function (form) {
+                if (form.querySelector('input[name="csrf_token"]')) {
+                    return;
+                }
+                const input = document.createElement("input");
+                input.type = "hidden";
+                input.name = "csrf_token";
+                input.value = csrfToken;
+                form.appendChild(input);
+            });
+            document.addEventListener("submit", function (event) {
+                const form = event.target;
+                if (!(form instanceof HTMLFormElement)) {
+                    return;
+                }
+                if ((form.enctype || "").toLowerCase() !== "multipart/form-data") {
+                    return;
+                }
+                const url = new URL(form.action || window.location.href, window.location.origin);
+                if (!url.searchParams.has("csrf_token")) {
+                    url.searchParams.set("csrf_token", csrfToken);
+                    form.action = url.toString();
+                }
+            }, true);
+        })();
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

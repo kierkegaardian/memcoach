@@ -3,8 +3,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from db.database import get_db
-from models.kid import KidCreate
-from config import load_config  # For future use
 import sqlite3
 from utils.auth import require_parent_session
 

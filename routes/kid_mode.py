@@ -15,7 +15,7 @@ async def kid_mode_home(request: Request, conn=Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute("SELECT id, name FROM kids WHERE deleted_at IS NULL ORDER BY name")
     kids = [dict(row) for row in cursor.fetchall()]
-    return templates.TemplateResponse("kid_mode.html", {"request": request, "kids": kids})
+    return templates.TemplateResponse(request, "kid_mode.html", {"request": request, "kids": kids})
 
 
 @router.get("/{kid_id}", response_class=HTMLResponse)
@@ -28,14 +28,22 @@ async def kid_mode_decks(kid_id: int, request: Request, conn=Depends(get_db)):
     kid = {"id": kid_row[0], "name": kid_row[1]}
     cursor.execute(
         """
-        SELECT d.id, d.name
+        SELECT d.id, d.name, d.review_mode
         FROM decks d
         WHERE d.deleted_at IS NULL
         ORDER BY d.name
         """
     )
-    decks = [dict(row) for row in cursor.fetchall()]
+    all_decks = [dict(row) for row in cursor.fetchall()]
+    decks = [deck for deck in all_decks if (deck.get("review_mode") or "free_recall") != "recitation"]
+    blocked_recitation_count = len(all_decks) - len(decks)
     return templates.TemplateResponse(
+        request,
         "kid_mode_decks.html",
-        {"request": request, "kid": kid, "decks": decks},
+        {
+            "request": request,
+            "kid": kid,
+            "decks": decks,
+            "blocked_recitation_count": blocked_recitation_count,
+        },
     )

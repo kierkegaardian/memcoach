@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Parent Required - MemCoach{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="rounded-lg border border-amber-300 bg-amber-50 p-6">
+        <h2 class="text-2xl font-bold text-amber-900 mb-2">Parent Key Required</h2>
+        <p class="text-amber-800 mb-4">
+            {{ deck.name }} is a parent-led recitation deck for {{ kid.name }}.
+        </p>
+        <p class="text-amber-800 mb-6">
+            Unlock Parent Mode in the top bar, then start this review again.
+        </p>
+        <div class="flex flex-wrap gap-3">
+            <a href="/kid-mode/{{ kid_id }}" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Back to Kid Decks</a>
+            <a href="/review/{{ kid_id }}/{{ deck_id }}" class="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700">Try Again</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,7 +1,4 @@
 from pydantic import BaseModel
-from typing import Optional
-from datetime import date
-from decimal import Decimal
 
 class CardBase(BaseModel):
     deck_id: int

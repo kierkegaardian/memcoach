@@ -1,5 +1,6 @@
 from Levenshtein import ratio as lev_ratio
 from difflib import SequenceMatcher
+import asyncio
 from typing import Dict, Any, List
 from config import load_config
 from .ollama import grade_with_llm
@@ -26,10 +27,16 @@ def grade_recall(full_text: str, user_text: str, config: Dict[str, Any] = None) 
     elif lev >= good_th:
         if use_llm and lev < perfect_th:  # Borderline: use LLM to decide perfect/good
             llm_grade = grade_with_llm(full_text, user_text, config)
-            return llm_grade if llm_grade in ['perfect', 'good'] else 'good'
+            if llm_grade in ['perfect', 'good']:
+                return llm_grade
+            return 'good'
         return 'good'
     else:
         return 'fail'
+
+
+async def grade_recall_async(full_text: str, user_text: str, config: Dict[str, Any] = None) -> str:
+    return await asyncio.to_thread(grade_recall, full_text, user_text, config)
 
 def get_quality_score(grade: str) -> int:
     """Map grade to SM-2 quality (0-5)."""

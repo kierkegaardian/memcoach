@@ -22,6 +22,18 @@ def _coerce_float(value: Any, default: float) -> float:
     except (TypeError, ValueError):
         return default
 
+
+def _coerce_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
+
 def load_config() -> Dict[str, Any]:
     """Load config from ~/.memcoach/config.toml, copy example if missing, load .env overrides."""
     load_dotenv()  # Load .env for overrides (e.g., OLLAMA_MODEL env var)
@@ -85,30 +97,54 @@ def load_config() -> Dict[str, Any]:
         "language": os.getenv("STT_LANGUAGE", stt_cfg.get("language", "en")),
         "device": os.getenv("STT_DEVICE", stt_cfg.get("device", "cpu")),
         "compute_type": os.getenv("STT_COMPUTE_TYPE", stt_cfg.get("compute_type", "int8")),
-        "normalize_audio": os.getenv(
-            "STT_NORMALIZE_AUDIO",
-            str(stt_cfg.get("normalize_audio", True)),
-        ).lower() == "true",
-        "vad_filter": os.getenv(
-            "STT_VAD_FILTER",
-            str(stt_cfg.get("vad_filter", True)),
-        ).lower() == "true",
-        "no_speech_threshold": float(os.getenv(
+        "normalize_audio": _coerce_bool(
+            os.getenv("STT_NORMALIZE_AUDIO", stt_cfg.get("normalize_audio", True)),
+            True,
+        ),
+        "vad_filter": _coerce_bool(
+            os.getenv("STT_VAD_FILTER", stt_cfg.get("vad_filter", True)),
+            True,
+        ),
+        "no_speech_threshold": _coerce_float(os.getenv(
             "STT_NO_SPEECH_THRESHOLD",
             stt_cfg.get("no_speech_threshold", 0.6),
-        )),
-        "log_prob_threshold": float(os.getenv(
+        ), 0.6),
+        "log_prob_threshold": _coerce_float(os.getenv(
             "STT_LOG_PROB_THRESHOLD",
             stt_cfg.get("log_prob_threshold", -1.0),
-        )),
-        "fallback_no_speech_threshold": float(os.getenv(
+        ), -1.0),
+        "fallback_no_speech_threshold": _coerce_float(os.getenv(
             "STT_FALLBACK_NO_SPEECH_THRESHOLD",
             stt_cfg.get("fallback_no_speech_threshold", 0.9),
-        )),
-        "fallback_log_prob_threshold": float(os.getenv(
+        ), 0.9),
+        "fallback_log_prob_threshold": _coerce_float(os.getenv(
             "STT_FALLBACK_LOG_PROB_THRESHOLD",
             stt_cfg.get("fallback_log_prob_threshold", -5.0),
-        )),
+        ), -5.0),
+    }
+    uploads_cfg = config.get("uploads", {})
+    config["uploads"] = {
+        "backup_restore_max_bytes": _coerce_int(
+            os.getenv(
+                "UPLOAD_BACKUP_RESTORE_MAX_BYTES",
+                uploads_cfg.get("backup_restore_max_bytes", 20 * 1024 * 1024),
+            ),
+            20 * 1024 * 1024,
+        ),
+        "stt_audio_max_bytes": _coerce_int(
+            os.getenv(
+                "UPLOAD_STT_AUDIO_MAX_BYTES",
+                uploads_cfg.get("stt_audio_max_bytes", 25 * 1024 * 1024),
+            ),
+            25 * 1024 * 1024,
+        ),
+        "cards_txt_max_bytes": _coerce_int(
+            os.getenv(
+                "UPLOAD_CARDS_TXT_MAX_BYTES",
+                uploads_cfg.get("cards_txt_max_bytes", 5 * 1024 * 1024),
+            ),
+            5 * 1024 * 1024,
+        ),
     }
     return config
 

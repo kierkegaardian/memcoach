@@ -1,9 +1,10 @@
 import argparse
 import uvicorn
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from contextlib import asynccontextmanager
 
 import sys
@@ -13,10 +14,15 @@ from pathlib import Path
 base_dir = Path(__file__).parent
 sys.path.insert(0, str(base_dir))
 
-from db.database import init_db, get_db
-from config import load_config, CONFIG_DIR
+from db.database import init_db
+from config import load_config
 from routes import kids, decks, cards, review, stats, plan, backups, trash, search, parent, kid_mode, today, reports, stt, bible  # Import routers
 from utils.auth import is_parent_unlocked, get_parent_pin_hash
+from utils.csrf import (
+    CSRF_COOKIE_NAME,
+    generate_csrf_token,
+    validate_csrf_request,
+)
 
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 app = FastAPI(title="MemCoach", description="Local-first memorization app for kids")
@@ -44,20 +50,27 @@ app.include_router(bible.router, tags=["bible"])
 async def parent_session_middleware(request: Request, call_next):
     request.state.parent_unlocked = is_parent_unlocked(request)
     request.state.parent_pin_configured = bool(get_parent_pin_hash())
-    response = await call_next(request)
+    csrf_token = request.cookies.get(CSRF_COOKIE_NAME) or generate_csrf_token()
+    request.state.csrf_token = csrf_token
+    try:
+        await validate_csrf_request(request)
+    except HTTPException as exc:
+        response = JSONResponse({"detail": getattr(exc, "detail", "Forbidden")}, status_code=403)
+    else:
+        response = await call_next(request)
+    if request.cookies.get(CSRF_COOKIE_NAME) != csrf_token:
+        response.set_cookie(
+            CSRF_COOKIE_NAME,
+            csrf_token,
+            httponly=True,
+            samesite="lax",
+        )
     return response
-
-# Dependency for DB connection
-def get_db_conn():
-    yield from get_db()
 
 # Home page - list kids
 @app.get("/", response_class=HTMLResponse)
-async def home(request: Request, conn = Depends(get_db_conn)):
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, name FROM kids WHERE deleted_at IS NULL ORDER BY name")
-    kids_list = [dict(row) for row in cursor.fetchall()]
-    return templates.TemplateResponse("index.html", {"request": request, "kids": kids_list})
+async def home() -> RedirectResponse:
+    return RedirectResponse(url="/kid-mode", status_code=307)
 
 # First-run init
 @asynccontextmanager

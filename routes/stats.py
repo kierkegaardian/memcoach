@@ -25,7 +25,6 @@ async def kid_stats(kid_id: int, request: Request, conn = Depends(get_db)):
     total_reviews = sum(grades.values())
     perfect = grades.get('perfect', 0)
     good = grades.get('good', 0)
-    fail = grades.get('fail', 0)
     success_rate = ((perfect + good) / total_reviews * 100) if total_reviews else 0
     cursor.execute("""
         SELECT d.name, COUNT(r.id) as review_count FROM reviews r 

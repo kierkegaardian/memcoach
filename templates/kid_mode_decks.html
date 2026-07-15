@@ -11,6 +11,11 @@
         </div>
         <a href="/kid-mode" class="text-blue-600 hover:underline">Choose a different kid</a>
     </div>
+    {% if blocked_recitation_count %}
+        <div class="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+            {{ blocked_recitation_count }} parent-led deck{% if blocked_recitation_count != 1 %}s are{% else %} is{% endif %} hidden in Kid Mode.
+        </div>
+    {% endif %}
     {% if decks %}
         <div class="grid gap-4 sm:grid-cols-2">
             {% for deck in decks %}

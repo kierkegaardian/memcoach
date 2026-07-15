@@ -3,14 +3,14 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from db.database import get_db
-from models.card import CardCreate
-import sqlite3
 import json
 from typing import Optional, List, Dict, Any
 import re
 from utils.auth import require_parent_session
 from utils.bible import get_translation_index
 from utils.tags import parse_tag_names, set_card_tags
+from config import load_config
+from utils.uploads import UploadTooLargeError, read_upload_limited
 
 router = APIRouter(dependencies=[Depends(require_parent_session)])
 base_dir = Path(__file__).resolve().parent.parent
@@ -246,7 +246,12 @@ async def add_cards(
             start_position = get_next_card_position(cursor, deck_id)
             if not file.filename.endswith('.txt'):
                 raise HTTPException(status_code=400, detail="File must be .txt")
-            content = await file.read()
+            config = load_config()
+            max_bytes = int(config.get("uploads", {}).get("cards_txt_max_bytes", 5 * 1024 * 1024))
+            try:
+                content = await read_upload_limited(file, max_bytes=max_bytes)
+            except UploadTooLargeError as exc:
+                raise HTTPException(status_code=413, detail=str(exc)) from exc
             text = content.decode('utf-8', errors='ignore')
             blocks = [b.strip() for b in re.split(r"\r?\n\s*\r?\n+", text) if b.strip()]
             prompt_base_clean = (prompt_base or "").strip()

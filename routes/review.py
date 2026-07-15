@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from db.database import get_db
-from utils.grading import grade_recall, token_diff
+from utils.grading import grade_recall_async, token_diff
 from utils.hints import (
     build_hint_text,
     build_cloze_text,
@@ -22,7 +22,6 @@ from utils.progress import (
 from config import load_config
 from utils.auth import require_parent_session
 from utils.search import normalize_fts_query
-import sqlite3
 from typing import Optional, Dict, List
 from datetime import datetime, timezone
 
@@ -141,6 +140,18 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
     if not deck_row:
         raise HTTPException(status_code=404, detail="Deck not found")
     deck = {"id": deck_row[0], "name": deck_row[1], "review_mode": deck_row[2] or "free_recall"}
+    if deck["review_mode"] == "recitation" and not getattr(request.state, "parent_unlocked", False):
+        return templates.TemplateResponse(
+            request,
+            "review_parent_required.html",
+            {
+                "request": request,
+                "kid": kid,
+                "deck": deck,
+                "kid_id": kid_id,
+                "deck_id": deck_id,
+            },
+        )
     cursor.execute(
         """
         SELECT DISTINCT t.name
@@ -171,6 +182,7 @@ async def start_review(kid_id: int, deck_id: int, request: Request, conn = Depen
     masked_text = build_cloze_text(card["full_text"]) if card and review_mode == "cloze" else ""
     initials_text = build_first_letters_text(card["full_text"]) if card and review_mode == "first_letters" else ""
     return templates.TemplateResponse(
+        request,
         "review.html",
         {
             "request": request,
@@ -213,6 +225,7 @@ async def next_card(kid_id: int, deck_id: int, request: Request, conn = Depends(
     )
     if card:
         return templates.TemplateResponse(
+            request,
             "partials/card.html",
             {
                 "request": request,
@@ -234,6 +247,7 @@ async def next_card(kid_id: int, deck_id: int, request: Request, conn = Depends(
         )
     else:
         return templates.TemplateResponse(
+            request,
             "partials/no_cards.html",
             {"request": request, "kid_id": kid_id, "deck_id": deck_id, "group_texts": group_texts},
         )
@@ -281,6 +295,8 @@ async def submit_review(
     if not card_row:
         raise HTTPException(status_code=404, detail="Card not found")
     card = dict(card_row)
+    if card["deck_id"] != deck_id:
+        raise HTTPException(status_code=400, detail="Deck does not match card")
     full_text = card['full_text']
     hint_mode = normalize_hint_mode(hint_mode)
     if review_mode == "recitation":
@@ -304,7 +320,7 @@ async def submit_review(
         final_grade = grade
         graded_by = "parent"
     else:
-        auto_grade = grade_recall(full_text, user_text, config)
+        auto_grade = await grade_recall_async(full_text, user_text, config)
         final_grade = auto_grade
         graded_by = "auto"
         quality = map_grade_to_quality(final_grade)
@@ -374,6 +390,7 @@ async def submit_review(
         'fail': 'bg-red-100 border-red-400 text-red-800'
     }
     return templates.TemplateResponse(
+        request,
         "partials/review_result.html",
         {
             "request": request,
@@ -459,6 +476,7 @@ async def override_review_grade(
         "fail": "bg-red-100 border-red-400 text-red-800",
     }
     return templates.TemplateResponse(
+        request,
         "partials/review_result.html",
         {
             "request": request,

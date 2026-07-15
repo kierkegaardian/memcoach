@@ -122,6 +122,7 @@
 <script>
     (function () {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
         if (!SpeechRecognition) {
             document.querySelectorAll('.voice-status').forEach((el) => {
                 el.textContent = 'Voice input not supported in this browser.';
@@ -142,7 +143,8 @@
         let activeStatus = null;
         let activeInput = null;
         let activePreview = null;
-        let finalTranscript = '';
+        let baseInputText = '';
+        let recognizedFinalText = '';
         let shouldListen = false;
         let restartTimer = null;
         let activeLocalButton = null;
@@ -152,6 +154,7 @@
         let localRecorder = null;
         let localStream = null;
         let localChunks = [];
+        let localRecorderMimeType = '';
         let activeMeterBar = null;
         let meterAnimation = null;
         let meterAudioContext = null;
@@ -180,6 +183,32 @@
             }
         };
 
+        const normalizeSpokenText = (value) => (value || '').replace(/\s+/g, ' ').trim();
+
+        const mergeWithWordOverlap = (existing, incoming) => {
+            const left = normalizeSpokenText(existing);
+            const right = normalizeSpokenText(incoming);
+            if (!left) return right;
+            if (!right) return left;
+            if (left === right) return left;
+            if (left.endsWith(right)) return left;
+            if (right.startsWith(left)) return right;
+
+            const leftWords = left.split(' ');
+            const rightWords = right.split(' ');
+            const maxOverlap = Math.min(leftWords.length, rightWords.length);
+            for (let count = maxOverlap; count > 0; count--) {
+                const leftTail = leftWords.slice(-count).join(' ');
+                const rightHead = rightWords.slice(0, count).join(' ');
+                if (leftTail === rightHead) {
+                    return `${left} ${rightWords.slice(count).join(' ')}`.trim();
+                }
+            }
+            if (right.includes(left)) return right;
+            if (left.includes(right)) return left;
+            return `${left} ${right}`.trim();
+        };
+
         const setLocalStatus = (message) => {
             if (activeLocalStatus) {
                 activeLocalStatus.textContent = message;
@@ -197,7 +226,8 @@
             activeStatus = null;
             activeInput = null;
             activePreview = null;
-            finalTranscript = '';
+            baseInputText = '';
+            recognizedFinalText = '';
         };
 
         const resetLocalState = () => {
@@ -208,6 +238,7 @@
             localRecorder = null;
             localStream = null;
             localChunks = [];
+            localRecorderMimeType = '';
         };
 
         const stopMeter = () => {
@@ -394,6 +425,8 @@
                 'audio/webm;codecs=opus',
                 'audio/webm',
                 'audio/ogg;codecs=opus',
+                'audio/mp4',
+                'video/mp4',
             ];
             for (const candidate of candidates) {
                 if (window.MediaRecorder && MediaRecorder.isTypeSupported(candidate)) {
@@ -432,17 +465,23 @@
             };
 
             recognizer.onresult = (event) => {
-                let interim = '';
+                let interimText = '';
                 for (let i = event.resultIndex; i < event.results.length; i++) {
-                    const transcript = event.results[i][0].transcript;
+                    const transcript = normalizeSpokenText(event.results[i][0]?.transcript || '');
+                    if (!transcript) {
+                        continue;
+                    }
                     if (event.results[i].isFinal) {
-                        finalTranscript += transcript + ' ';
+                        recognizedFinalText = mergeWithWordOverlap(recognizedFinalText, transcript);
                     } else {
-                        interim += transcript;
+                        interimText = mergeWithWordOverlap(interimText, transcript);
                     }
                 }
+                const spokenNow = mergeWithWordOverlap(recognizedFinalText, interimText);
                 if (activeInput) {
-                    const combined = (finalTranscript + interim).trim();
+                    const combined = normalizeSpokenText(
+                        [baseInputText, spokenNow].filter((part) => part && part.length > 0).join(' ')
+                    );
                     activeInput.value = combined;
                     if (combined) {
                         const previewText = combined.length > 120 ? `${combined.slice(0, 117)}…` : combined;
@@ -472,8 +511,8 @@
                     restartTimer = window.setTimeout(startRecognizer, 250);
                     return;
                 }
-                setStatus(finalTranscript ? 'Transcription ready.' : 'Voice input stopped.');
-                setPreview(finalTranscript ? 'Transcript ready.' : '');
+                setStatus(recognizedFinalText ? 'Transcription ready.' : 'Voice input stopped.');
+                setPreview(recognizedFinalText ? 'Transcript ready.' : '');
                 setButtonLabel('🎙️ Start voice input');
                 resetState();
             };
@@ -524,7 +563,8 @@
             activeStatus = status;
             activeInput = input;
             activePreview = preview;
-            finalTranscript = input.value ? input.value + ' ' : '';
+            baseInputText = (input.value || '').trim();
+            recognizedFinalText = '';
             shouldListen = true;
 
             setStatus('Starting mic...');
@@ -572,6 +612,10 @@
                 }
                 return;
             }
+            if (!window.MediaRecorder) {
+                setLocalStatus('This browser cannot record audio here. Try Safari app or Chrome.');
+                return;
+            }
 
             if (activeButton) {
                 stopRecognizer();
@@ -596,12 +640,13 @@
                 localStream = await navigator.mediaDevices.getUserMedia(constraints);
                 refreshMicOptions();
                 const mimeType = getSupportedMimeType();
+                localRecorderMimeType = mimeType;
                 localRecorder = mimeType
                     ? new MediaRecorder(localStream, { mimeType })
                     : new MediaRecorder(localStream);
                 startMeter(localStream, meterBar, false);
-            } catch (err) {
-                setLocalStatus('Microphone access denied.');
+            } catch (_err) {
+                setLocalStatus('Microphone unavailable. Check permissions and try again.');
                 setLocalButtonLabel('🎧 Record & transcribe');
                 cleanupLocalStream();
                 stopMeter();
@@ -618,15 +663,21 @@
             localRecorder.onstop = async () => {
                 cleanupLocalStream();
                 stopMeter();
-                const blobType = localRecorder.mimeType || 'audio/webm';
+                const blobType = localRecorder.mimeType || localRecorderMimeType || 'audio/webm';
                 const blob = new Blob(localChunks, { type: blobType });
-                const ext = blobType.includes('ogg') ? 'ogg' : 'webm';
+                let ext = 'webm';
+                if (blobType.includes('ogg')) {
+                    ext = 'ogg';
+                } else if (blobType.includes('mp4') || blobType.includes('m4a')) {
+                    ext = 'm4a';
+                }
                 const formData = new FormData();
                 formData.append('audio', blob, `recording.${ext}`);
                 setLocalStatus('Transcribing locally...');
                 try {
                     const response = await fetch('/stt', {
                         method: 'POST',
+                        headers: csrfToken ? { 'x-csrf-token': csrfToken } : {},
                         body: formData,
                     });
                     const payload = await response.json().catch(() => ({}));

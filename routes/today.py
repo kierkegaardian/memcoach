@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from db.database import get_db
-from utils.grading import grade_recall
+from utils.grading import grade_recall_async
 from utils.hints import (
     HINT_MODE_OPTIONS,
     build_hint_text,
@@ -225,6 +225,7 @@ async def today_view(kid_id: int, request: Request, conn=Depends(get_db)):
     avg_duration = get_recent_avg_duration(conn, kid_id)
     estimated_seconds = total_due * avg_duration
     return templates.TemplateResponse(
+        request,
         "today.html",
         {
             "request": request,
@@ -242,6 +243,7 @@ async def today_view(kid_id: int, request: Request, conn=Depends(get_db)):
 async def today_queue(kid_id: int, request: Request, conn=Depends(get_db)):
     assignments, queue_cards = build_today_queue(conn, kid_id)
     return templates.TemplateResponse(
+        request,
         "partials/today_queue.html",
         {
             "request": request,
@@ -257,6 +259,7 @@ async def today_next_card(kid_id: int, request: Request, conn=Depends(get_db)):
     assignments, queue_cards = build_today_queue(conn, kid_id)
     if not queue_cards:
         return templates.TemplateResponse(
+            request,
             "partials/today_no_cards.html",
             {"request": request, "kid_id": kid_id},
         )
@@ -266,6 +269,7 @@ async def today_next_card(kid_id: int, request: Request, conn=Depends(get_db)):
     masked_text = build_cloze_text(card["full_text"]) if review_mode == "cloze" else ""
     initials_text = build_first_letters_text(card["full_text"]) if review_mode == "first_letters" else ""
     return templates.TemplateResponse(
+        request,
         "partials/today_card.html",
         {
             "request": request,
@@ -337,7 +341,7 @@ async def submit_today_review(
         final_grade = grade
         graded_by = "parent"
     else:
-        auto_grade = grade_recall(full_text, user_text, config)
+        auto_grade = await grade_recall_async(full_text, user_text, config)
         final_grade = auto_grade
         graded_by = "auto"
         quality = map_grade_to_quality(final_grade)
@@ -409,6 +413,7 @@ async def submit_today_review(
         "fail": "bg-red-100 border-red-400 text-red-800",
     }
     return templates.TemplateResponse(
+        request,
         "partials/today_review_result.html",
         {
             "request": request,

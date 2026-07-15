@@ -5,7 +5,7 @@ import hashlib
 import hmac
 import secrets
 import time
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import HTTPException, Request, status
 
@@ -17,7 +17,7 @@ PIN_HASH_ITERATIONS = 200_000
 DEFAULT_SESSION_MINUTES = 30
 
 
-def _get_parent_config() -> dict:
+def _get_parent_config() -> dict[str, Any]:
     config = load_config()
     return config.get("parent", {})
 
@@ -25,7 +25,7 @@ def _get_parent_config() -> dict:
 def get_parent_pin_hash() -> Optional[str]:
     parent_cfg = _get_parent_config()
     pin_hash = parent_cfg.get("pin_hash")
-    return pin_hash or None
+    return pin_hash if isinstance(pin_hash, str) and pin_hash else None
 
 
 def get_parent_session_minutes() -> int:
@@ -108,7 +108,7 @@ def verify_parent_session_cookie(cookie_value: Optional[str], pin_hash: Optional
 def is_parent_unlocked(request: Request) -> bool:
     pin_hash = get_parent_pin_hash()
     if not pin_hash:
-        return False
+        return True
     cookie_value = request.cookies.get(SESSION_COOKIE_NAME)
     return verify_parent_session_cookie(cookie_value, pin_hash)
 

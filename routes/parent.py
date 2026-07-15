@@ -2,6 +2,7 @@ from fastapi import APIRouter, Form, Request, status, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from utils.auth import (
     SESSION_COOKIE_NAME,
@@ -19,14 +20,25 @@ base_dir = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 
 
+def sanitize_next_path(next_path: str) -> str:
+    candidate = (next_path or "").strip()
+    if not candidate.startswith("/") or candidate.startswith("//"):
+        return "/"
+    parsed = urlsplit(candidate)
+    if parsed.scheme or parsed.netloc:
+        return "/"
+    return candidate
+
+
 @router.post("/unlock")
 async def unlock_parent(pin: str = Form(...), next_path: str = Form("/")):
+    safe_next_path = sanitize_next_path(next_path)
     pin_hash = get_parent_pin_hash()
     if not pin_hash or not verify_pin(pin, pin_hash):
-        return RedirectResponse(url=next_path or "/", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=safe_next_path, status_code=status.HTTP_303_SEE_OTHER)
     duration = get_parent_session_minutes()
     cookie_value = create_parent_session_cookie(pin_hash, duration)
-    response = RedirectResponse(url=next_path or "/", status_code=status.HTTP_303_SEE_OTHER)
+    response = RedirectResponse(url=safe_next_path, status_code=status.HTTP_303_SEE_OTHER)
     response.set_cookie(
         SESSION_COOKIE_NAME,
         cookie_value,
@@ -39,7 +51,10 @@ async def unlock_parent(pin: str = Form(...), next_path: str = Form("/")):
 
 @router.post("/lock")
 async def lock_parent(request: Request, next_path: str = Form("/")):
-    response = RedirectResponse(url=next_path or "/", status_code=status.HTTP_303_SEE_OTHER)
+    response = RedirectResponse(
+        url=sanitize_next_path(next_path),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
     response.delete_cookie(SESSION_COOKIE_NAME)
     return response
 
@@ -56,6 +71,7 @@ async def setup_parent_pin(request: Request):
     if configured and not is_parent_unlocked(request):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Parent session required")
     return templates.TemplateResponse(
+        request,
         "parent/setup.html",
         {"request": request, "configured": configured, "error": None},
     )
@@ -68,11 +84,13 @@ async def save_parent_pin(
     pin_confirm: str = Form(...),
     next_path: str = Form("/"),
 ):
+    safe_next_path = sanitize_next_path(next_path)
     pin_hash_existing = get_parent_pin_hash()
     if pin_hash_existing and not is_parent_unlocked(request):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Parent session required")
     if pin != pin_confirm:
         return templates.TemplateResponse(
+            request,
             "parent/setup.html",
             {
                 "request": request,
@@ -85,6 +103,7 @@ async def save_parent_pin(
         new_hash = hash_pin(pin)
     except ValueError as exc:
         return templates.TemplateResponse(
+            request,
             "parent/setup.html",
             {
                 "request": request,
@@ -96,7 +115,7 @@ async def save_parent_pin(
     set_parent_pin_hash(new_hash)
     duration = get_parent_session_minutes()
     cookie_value = create_parent_session_cookie(new_hash, duration)
-    response = RedirectResponse(url=next_path or "/", status_code=status.HTTP_303_SEE_OTHER)
+    response = RedirectResponse(url=safe_next_path, status_code=status.HTTP_303_SEE_OTHER)
     response.set_cookie(
         SESSION_COOKIE_NAME,
         cookie_value,

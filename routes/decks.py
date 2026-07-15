@@ -3,7 +3,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from db.database import get_db
-from models.deck import DeckCreate
 import sqlite3
 from utils.mastery import mastery_percent
 from utils.auth import require_parent_session
