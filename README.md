@@ -176,14 +176,15 @@ fallback_log_prob_threshold = -5.0
   - Auto-create ~/.memcoach/ directory
   - Copy default config.toml if missing
   - Run DB migrations (create tables)
+  - Leave parent routes available until you configure a Parent Mode PIN
 
 ## Installation & Running
 
 ```bash
 # Clone and install
-git clone https://github.com/you/memcoach-web.git
-cd memcoach-web
-pip install fastapi uvicorn jinja2 python-multipart levenshtein python-dotenv
+git clone https://github.com/kierkegaardian/memcoach.git
+cd memcoach
+pip install -r requirements.txt
 
 # First run (sets up config and DB)
 python main.py --init
@@ -247,6 +248,56 @@ pip install -r requirements.txt
 
 Deactivate with `deactivate`.
 
+## Secondary Android Wrapper (Termux)
+
+The native app below is the primary Android client. The older WebView wrapper remains available for deployments that intentionally run the Python server inside Termux:
+
+```bash
+# In Termux on your phone
+pkg update
+pkg install -y python git clang rust libjpeg-turbo libpng freetype
+
+git clone https://github.com/kierkegaardian/memcoach.git
+cd memcoach
+python -m venv .venv
+. .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+uvicorn main:app --host 127.0.0.1 --port 8000
+```
+
+Then open the Android wrapper app and use:
+
+`http://127.0.0.1:8000`
+
+Notes:
+- Keep the Termux server running while using the app.
+- The wrapper now allows loopback HTTP (`127.0.0.1`/`localhost`) and still requires HTTPS for non-local URLs.
+- Build the wrapper with `make android-wrapper-debug` from the repository root.
+
+## Native Android Track
+
+The primary Android client is the offline native app under [`android-native/`](android-native/) for kid-device deployment. Current native milestones include:
+- fully offline review flow
+- local persistence with Room
+- child mode with a local parent PIN so setup can stay hidden on a child's device
+
+Use the native track when you want a Boox Palma or other Android device to run MemCoach without a local web server.
+
+## Reproducible Test Runner Setup
+
+If commands inside `.venv/bin/` fail with a `bad interpreter` path error, recreate the venv from this repo path:
+
+```bash
+cd memcoach
+python -m venv --clear .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+make check PYTHON=python
+```
+
+Using `python -m pytest` avoids stale shebang issues in moved/copied worktrees.
+
 ## Roadmap: Multi-Platform Support
 
 The goal is to run MemCoach anywhere, from servers to local offline devices.
@@ -265,14 +316,9 @@ The goal is to run MemCoach anywhere, from servers to local offline devices.
     *   Bundle `ffmpeg` and local models (Ollama/Whisper) or provide a guided setup wizard.
 
 ### 3. Mobile (Android & iOS)
-*   **Option A: PWA (Recommended First Step)**
-    *   Enhance the current web app with a `manifest.json` and Service Workers to allow "Add to Home Screen".
-    *   This works on both Android and iOS immediately if hosted on a server.
-*   **Option B: Native Offline App**
-    *   **Challenge:** Running Python (FastAPI/Ollama) locally on iOS is difficult due to JIT restrictions.
-    *   **Strategy:** Port the frontend to a framework like **Flutter** or **React Native**.
-    *   **Database:** Use local SQLite on the device.
-    *   **Sync:** Implement a sync mechanism to a self-hosted MemCoach server.
+*   **Android:** Continue the Kotlin/Compose offline client in `android-native/`; Room, deterministic grading, scheduling, review, and parent guardrails are already implemented.
+*   **Hosted/PWA:** Keep the web app and WebView wrapper as optional secondary distribution paths.
+*   **iOS:** Evaluate only after the native Android baseline is stable; iOS parity is not required for the first Android release.
 
 ## Roadmap: UI/UX Improvements
 

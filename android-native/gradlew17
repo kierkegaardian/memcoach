@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/memcoach"
+JDK_DIR="$CACHE_DIR/jdk-17"
+ARCHIVE_PATH="$CACHE_DIR/jdk17.tar.gz"
+GRADLE_CACHE_DIR="$CACHE_DIR/gradle"
+JDK_URL="https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse"
+LOCAL_PROPERTIES_PATH="$ROOT_DIR/local.properties"
+
+mkdir -p "$CACHE_DIR"
+export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$GRADLE_CACHE_DIR}"
+
+resolve_sdk_dir_from_local_properties() {
+  if [ ! -f "$LOCAL_PROPERTIES_PATH" ]; then
+    return 1
+  fi
+
+  local sdk_dir
+  sdk_dir="$(sed -n 's/^sdk\.dir=//p' "$LOCAL_PROPERTIES_PATH" | tail -n 1)"
+  if [ -z "$sdk_dir" ]; then
+    return 1
+  fi
+
+  sdk_dir="${sdk_dir//\\\\/\\}"
+  sdk_dir="${sdk_dir//\\:/:}"
+  sdk_dir="${sdk_dir//\\=/=}"
+  printf '%s\n' "$sdk_dir"
+}
+
+resolve_sdk_dir() {
+  if [ -n "${ANDROID_SDK_ROOT:-}" ]; then
+    SDK_DIR="$ANDROID_SDK_ROOT"
+    SDK_SOURCE="ANDROID_SDK_ROOT"
+    return
+  fi
+
+  if [ -n "${ANDROID_HOME:-}" ]; then
+    SDK_DIR="$ANDROID_HOME"
+    SDK_SOURCE="ANDROID_HOME"
+    return
+  fi
+
+  local local_sdk_dir
+  if local_sdk_dir="$(resolve_sdk_dir_from_local_properties)"; then
+    SDK_DIR="$local_sdk_dir"
+    SDK_SOURCE="local.properties"
+    return
+  fi
+
+  SDK_DIR="$HOME/Android/Sdk"
+  SDK_SOURCE="\$HOME/Android/Sdk"
+}
+
+find_sdkmanager() {
+  local candidate
+  for candidate in \
+    "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" \
+    "$SDK_DIR/cmdline-tools/bin/sdkmanager" \
+    "$SDK_DIR/tools/bin/sdkmanager"
+  do
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+  done
+
+  if command -v sdkmanager >/dev/null 2>&1; then
+    command -v sdkmanager
+    return
+  fi
+
+  return 1
+}
+
+print_sdk_setup_help() {
+  local sdkmanager_cmd="$1"
+  cat >&2 <<EOF
+Android SDK setup is incomplete.
+
+Resolved SDK path ($SDK_SOURCE): $SDK_DIR
+
+If Android Studio is installed, install the Android SDK Command-line Tools and then run:
+  yes | $sdkmanager_cmd --licenses
+  $sdkmanager_cmd "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+You can also point this wrapper at a different SDK by setting ANDROID_SDK_ROOT
+or ANDROID_HOME, or by writing sdk.dir=<path> to $LOCAL_PROPERTIES_PATH.
+EOF
+}
+
+fail_sdk_not_found() {
+  cat >&2 <<EOF
+Android SDK not found.
+
+Looked in:
+  ANDROID_SDK_ROOT
+  ANDROID_HOME
+  $LOCAL_PROPERTIES_PATH
+  $HOME/Android/Sdk
+
+Set ANDROID_SDK_ROOT or ANDROID_HOME, or add sdk.dir=<path> to $LOCAL_PROPERTIES_PATH.
+EOF
+
+  local sdkmanager_cmd
+  sdkmanager_cmd='sdkmanager'
+  if command -v sdkmanager >/dev/null 2>&1; then
+    sdkmanager_cmd="$(command -v sdkmanager)"
+  fi
+  print_sdk_setup_help "$sdkmanager_cmd"
+  exit 1
+}
+
+ensure_sdk_package() {
+  local path="$1"
+  local package_name="$2"
+  local sdkmanager_cmd="$3"
+
+  if [ -e "$path" ]; then
+    return
+  fi
+
+  echo "Missing required Android SDK package: $package_name" >&2
+  print_sdk_setup_help "$sdkmanager_cmd"
+  exit 1
+}
+
+warn_missing_platform_tools() {
+  local sdkmanager_cmd="$1"
+  if [ -d "$SDK_DIR/platform-tools" ]; then
+    return
+  fi
+
+  cat >&2 <<EOF
+Warning: Android SDK package platform-tools is missing.
+ADB installs will not work until you run:
+  $sdkmanager_cmd "platform-tools"
+EOF
+}
+
+download_jdk_if_needed() {
+  if [ -x "$JDK_DIR/bin/java" ]; then
+    return
+  fi
+
+  echo "Downloading JDK 17 to $JDK_DIR ..."
+  local tmp_archive
+  local tmp_dir
+  tmp_archive="$(mktemp "$CACHE_DIR/jdk17.XXXXXX.tar.gz")"
+  tmp_dir="$(mktemp -d)"
+  cleanup() {
+    rm -f "$tmp_archive"
+    rm -rf "$tmp_dir"
+  }
+  trap cleanup EXIT
+
+  rm -f "$ARCHIVE_PATH"
+  curl --fail --location --retry 5 --retry-all-errors "$JDK_URL" -o "$tmp_archive"
+  gzip -t "$tmp_archive"
+  rm -rf "$JDK_DIR"
+  tar -xzf "$tmp_archive" -C "$tmp_dir"
+
+  local extracted_dir
+  extracted_dir="$(find "$tmp_dir" -maxdepth 1 -type d -name 'jdk-*' | head -n 1)"
+  if [ -z "$extracted_dir" ]; then
+    echo "Failed to find extracted JDK directory" >&2
+    exit 1
+  fi
+
+  mv "$extracted_dir" "$JDK_DIR"
+  mv "$tmp_archive" "$ARCHIVE_PATH"
+  rm -rf "$tmp_dir"
+  trap - EXIT
+}
+
+resolve_sdk_dir
+if [ ! -d "$SDK_DIR" ]; then
+  fail_sdk_not_found
+fi
+
+SDKMANAGER_CMD="sdkmanager"
+if sdkmanager_path="$(find_sdkmanager)"; then
+  SDKMANAGER_CMD="$sdkmanager_path"
+fi
+
+ensure_sdk_package "$SDK_DIR/platforms/android-36" "platforms;android-36" "$SDKMANAGER_CMD"
+ensure_sdk_package "$SDK_DIR/build-tools/35.0.0" "build-tools;35.0.0" "$SDKMANAGER_CMD"
+warn_missing_platform_tools "$SDKMANAGER_CMD"
+
+export ANDROID_SDK_ROOT="$SDK_DIR"
+export ANDROID_HOME="$SDK_DIR"
+
+download_jdk_if_needed
+
+export JAVA_HOME="$JDK_DIR"
+export PATH="$JAVA_HOME/bin:$PATH"
+
+cd "$ROOT_DIR"
+exec "$ROOT_DIR/gradlew" "$@"

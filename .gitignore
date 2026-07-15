@@ -1,4 +1,5 @@
 .venv/
+*.egg-info/
 __pycache__/
 *.pyc
 *.pyo
@@ -21,6 +22,15 @@ android-wrapper/.gradle-bin/
 android-wrapper/.local-jdks/
 android-wrapper/app/build/
 android-wrapper/local.properties
+
+# Android native local artifacts
+android-native/.gradle/
+android-native/.gradle-user-home/
+android-native/.idea/
+android-native/local.properties
+android-native/**/build/
+android-native/keystore/
+android-native/.secrets/
 
 # Local runtime scratch dirs
 .bin/
