@@ -234,9 +234,10 @@ track below is now secondary.
 
 - [ ] Regression tests for all P0/P1 fixes.
 
-- [ ] AGY re-review after implementation.
-  - Save to a dated artifact under `reviews/agy/`.
-  - Acceptance: no blocking P0/P1 findings remain.
+- [x] AGY re-review after implementation.
+  - Initial findings: `reviews/agy/memcoach-web-review-20260715.md` and `reviews/agy/memcoach-android-ci-review-20260715.md`.
+  - Final verification: `reviews/agy/memcoach-web-final-review-20260715.md` and `reviews/agy/memcoach-android-final-review-20260715.md`.
+  - Result: no blocking P0/P1 findings remain.
 
 ## Execution Order
 
