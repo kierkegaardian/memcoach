@@ -137,7 +137,9 @@ async def edit_kid(kid_id: int, request: Request, name: str = Form(...), conn = 
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "UPDATE kids SET name = ? WHERE id = ? AND deleted_at IS NULL",
+            """UPDATE kids
+               SET name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+               WHERE id = ? AND deleted_at IS NULL""",
             (name.strip(), kid_id),
         )
         if cursor.rowcount == 0:
@@ -153,7 +155,9 @@ async def edit_kid(kid_id: int, request: Request, name: str = Form(...), conn = 
 async def delete_kid(kid_id: int, conn = Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE kids SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL",
+        """UPDATE kids
+           SET deleted_at = datetime('now'), updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+           WHERE id = ? AND deleted_at IS NULL""",
         (kid_id,),
     )
     if cursor.rowcount == 0:

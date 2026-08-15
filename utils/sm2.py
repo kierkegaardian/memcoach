@@ -18,16 +18,18 @@ def update_sm2(
     base_date: Optional[date] = None,
 ) -> Tuple[int, float, int, date]:
     """Update SM-2 parameters and compute new due date."""
+    safe_interval = max(1, card_interval)
+    safe_ef = max(1.3, card_ef)
     if quality < 3:
         new_streak = 0
         new_interval = 1
     else:
         new_streak = streak + 1
-        if card_interval == 1:
+        if safe_interval == 1:
             new_interval = 6 if quality >= 4 else 1
         else:
-            new_interval = max(1, round(card_interval * card_ef))
-    new_ef = max(1.3, card_ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)))
+            new_interval = max(1, round(safe_interval * safe_ef))
+    new_ef = max(1.3, safe_ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)))
     anchor = base_date or date.today()
     new_due = anchor + timedelta(days=new_interval)
     return new_interval, new_ef, new_streak, new_due

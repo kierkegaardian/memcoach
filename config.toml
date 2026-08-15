@@ -1,4 +1,5 @@
 [ollama]
+provider = "disabled"
 model = "llama3.2"
 timeout = 15
 
@@ -7,8 +8,9 @@ timeout = 15
 levenshtein_perfect_threshold = 0.98
 levenshtein_good_threshold = 0.85
 
-# Require LLM confirmation for borderline cases
-use_llm_on_borderline = true
+# Deterministic by default. Enable only for an intentional, active session after
+# configuring the governed Odysseus-to-Mac-mini network provider.
+use_llm_on_borderline = false
 
 [parent]
 # Parent routes remain available for first-run setup until a PIN is configured.

@@ -44,6 +44,7 @@ def load_config() -> Dict[str, Any]:
         config = tomllib.load(f)
     # Support legacy flat keys while preferring nested tables
     legacy_ollama = {
+        "provider": config.get("ollama_provider"),
         "model": config.get("ollama_model"),
         "timeout": config.get("ollama_timeout")
     }
@@ -62,6 +63,10 @@ def load_config() -> Dict[str, Any]:
     if ollama_timeout is None:
         ollama_timeout = 15
     config["ollama"] = {
+        "provider": os.getenv(
+            "OLLAMA_PROVIDER",
+            ollama_cfg.get("provider", legacy_ollama.get("provider", "disabled")),
+        ),
         "model": os.getenv("OLLAMA_MODEL", ollama_cfg.get("model", legacy_ollama.get("model", "llama3.2"))),
         "timeout": _coerce_int(ollama_timeout, 15),
     }
@@ -87,7 +92,7 @@ def load_config() -> Dict[str, Any]:
         "levenshtein_good_threshold": _coerce_float(good_threshold, 0.85),
         "use_llm_on_borderline": os.getenv(
             "USE_LLM_ON_BORDERLINE",
-            str(grading_cfg.get("use_llm_on_borderline", legacy_grading.get("use_llm_on_borderline", True)))
+            str(grading_cfg.get("use_llm_on_borderline", legacy_grading.get("use_llm_on_borderline", False)))
         ).lower() == "true",
     }
     stt_cfg = config.get("stt", {})

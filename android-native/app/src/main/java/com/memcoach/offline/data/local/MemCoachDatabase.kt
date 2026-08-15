@@ -21,8 +21,8 @@ import com.memcoach.offline.data.local.entity.ReviewEntity
         CardProgressEntity::class,
         ReviewEntity::class,
     ],
-    version = 1,
-    exportSchema = false,
+    version = MemCoachRoomMigrations.CURRENT_VERSION,
+    exportSchema = true,
 )
 abstract class MemCoachDatabase : RoomDatabase() {
     abstract fun kidDao(): KidDao

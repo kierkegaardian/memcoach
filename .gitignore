@@ -16,6 +16,10 @@ Thumbs.db
 *.swo
 uvicorn.log
 
+# Raw reviewer execution artifacts can contain identity and operational metadata.
+reviews/**/*.log
+reviews/**/*.input.txt
+
 # Android wrapper local artifacts
 android-wrapper/.gradle/
 android-wrapper/.gradle-bin/

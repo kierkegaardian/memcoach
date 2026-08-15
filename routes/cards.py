@@ -463,7 +463,7 @@ async def edit_card(
     cursor.execute(
         """
         UPDATE cards
-        SET prompt = ?, full_text = ?
+        SET prompt = ?, full_text = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
         WHERE id = ? AND deck_id = ? AND deleted_at IS NULL
         """,
         (prompt.strip(), full_text.strip(), card_id, deck_id),
@@ -527,7 +527,9 @@ async def edit_card(
 async def delete_card(deck_id: int, card_id: int, conn = Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE cards SET deleted_at = datetime('now') WHERE id = ? AND deck_id = ? AND deleted_at IS NULL",
+        """UPDATE cards
+           SET deleted_at = datetime('now'), updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+           WHERE id = ? AND deck_id = ? AND deleted_at IS NULL""",
         (card_id, deck_id),
     )
     if cursor.rowcount == 0:

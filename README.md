@@ -1,7 +1,7 @@
 .venv created for isolated environment
 # MemCoach - Web Edition (Local-First, Server-Ready)
 
-Build a **local-first web application** called **MemCoach** that helps kids memorize text (Bible verses, poems, quotes, etc.) using spaced repetition and AI-assisted grading — fully runnable offline, but designed from the ground up to be hosted on a server later.
+Build a **local-first web application** called **MemCoach** that helps kids memorize text (Bible verses, poems, quotes, etc.) using spaced repetition and optional AI-assisted grading — fully runnable offline, but designed from the ground up to be hosted on a server later.
 
 ## Core Requirements
 
@@ -11,7 +11,7 @@ Build a **local-first web application** called **MemCoach** that helps kids memo
 - **Database**: SQLite (`~/.memcoach/memcoach.db`) — works perfectly locally and on servers
 - **Run locally**: `http://127.0.0.1:8000` via `uvicorn`
 - **Future-proof**: Can be deployed to any VPS, Fly.io, Render, Railway, etc. with zero code changes
-- **AI Grading**: Use **Ollama** running locally (e.g. `llama3.2`, `phi3`, `gemma2`) for smart recall judgment
+- **AI Grading**: Deterministic Levenshtein grading is the default. Network LLM confirmation is intentionally opt-in for an active session.
 
 ## Project Structure
 ```
@@ -97,16 +97,28 @@ CREATE TABLE reviews (
 ## Config File (~/.memcoach/config.toml)
 
 ```toml
-ollama_model = "llama3.2"
-ollama_timeout = 15
+[ollama]
+provider = "disabled"
+model = "llama3.2"
+timeout = 15
 
-# Grading thresholds
+[grading]
 levenshtein_perfect_threshold = 0.98
 levenshtein_good_threshold = 0.85
-
-# Require LLM confirmation for borderline cases
-use_llm_on_borderline = true
+use_llm_on_borderline = false
 ```
+
+The Framework workstation does not run Ollama and MemCoach must not probe for
+an LLM in its normal always-on state. If LLM-assisted borderline grading is
+wanted during an intentional MemCoach session, enable it only after configuring
+a governed Odysseus provider. The documented network path is MemCoach on this
+workstation to Odysseus on `internalserver` (`192.168.1.184`), which reaches the
+loopback-only Ollama service on the Mac mini (`192.168.1.238`). The current
+`utils/ollama.py` supports only the legacy `local_cli` provider. The default
+`provider = "disabled"` guard means that merely changing
+`use_llm_on_borderline` cannot launch or probe anything. An Odysseus provider
+adapter and its normal authentication must be implemented before network
+grading is enabled; this cleanup does not claim or install that adapter.
 
 ## Core Web Routes
 
@@ -136,7 +148,7 @@ use_llm_on_borderline = true
 - "I'm Done" button
 - Instantly grade using:
   - Levenshtein ratio
-  - Ollama call: "Does this correctly reproduce the text? Answer with exactly: perfect, good, or fail."
+  - Optional, explicitly enabled network LLM confirmation for borderline answers
 - Show result with color (green/orange/red) + correct text
 - Auto-load next card via HTMX (no page refresh)
 
@@ -228,8 +240,8 @@ This repo ships with a small local KJV dataset in `data/kjv.json` to support off
 
 ## Why This Design Wins
 
-- 100% local, private, no cloud dependency
-- Ollama runs on your machine → zero cost, full privacy
+- Local-first and private by default, with no required LLM dependency
+- Optional network LLM grading uses the governed home-network route only during an intentional session
 - Works offline after first load
 - Deployable anywhere with one command
 - Beautiful, fast, and fun for kids

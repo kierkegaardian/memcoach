@@ -221,7 +221,9 @@ async def edit_deck(deck_id: int, request: Request, name: str = Form(...), conn 
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "UPDATE decks SET name = ? WHERE id = ? AND deleted_at IS NULL",
+            """UPDATE decks
+               SET name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+               WHERE id = ? AND deleted_at IS NULL""",
             (name.strip(), deck_id),
         )
         if cursor.rowcount == 0:
@@ -237,13 +239,17 @@ async def edit_deck(deck_id: int, request: Request, name: str = Form(...), conn 
 async def delete_deck(deck_id: int, conn = Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE decks SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL",
+        """UPDATE decks
+           SET deleted_at = datetime('now'), updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+           WHERE id = ? AND deleted_at IS NULL""",
         (deck_id,),
     )
     if cursor.rowcount == 0:
         raise HTTPException(status_code=404, detail="Deck not found")
     cursor.execute(
-        "UPDATE cards SET deleted_at = datetime('now') WHERE deck_id = ? AND deleted_at IS NULL",
+        """UPDATE cards
+           SET deleted_at = datetime('now'), updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+           WHERE deck_id = ? AND deleted_at IS NULL""",
         (deck_id,),
     )
     cursor.execute(

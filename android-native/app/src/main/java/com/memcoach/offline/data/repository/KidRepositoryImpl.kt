@@ -6,6 +6,7 @@ import com.memcoach.offline.domain.model.Kid
 import com.memcoach.offline.domain.repository.KidRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 
 class KidRepositoryImpl(
     private val kidDao: KidDao,
@@ -23,10 +24,13 @@ class KidRepositoryImpl(
         if (cleaned.isEmpty()) {
             return null
         }
+        val now = System.currentTimeMillis()
         val inserted = kidDao.insert(
             KidEntity(
                 name = cleaned,
-                createdAtEpochMillis = System.currentTimeMillis(),
+                createdAtEpochMillis = now,
+                portableId = UUID.randomUUID().toString(),
+                updatedAtEpochMillis = now,
             ),
         )
         return inserted.takeIf { it > 0 }

@@ -3,6 +3,7 @@ package com.memcoach.offline.scheduling
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
+import java.util.Locale
 import kotlin.math.max
 
 data class Sm2Result(
@@ -14,7 +15,7 @@ data class Sm2Result(
 
 object Sm2Engine {
     fun mapGradeToQuality(grade: String): Int {
-        return when (grade.lowercase()) {
+        return when (grade.lowercase(Locale.ROOT)) {
             "fail" -> 0
             "good" -> 3
             "perfect" -> 4

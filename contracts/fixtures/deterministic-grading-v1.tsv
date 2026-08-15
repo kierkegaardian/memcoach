@@ -1,0 +1,10 @@
+case_id	full_text	user_text	ratio_six	grade
+blank	abc	   	0.000000	fail
+exact_case	John 3:16	john 3:16	1.000000	perfect
+substitution	abc	axc	0.666667	fail
+borderline	the quick brown fox	the quick brwn fox	0.972973	good
+good	abcdefghij	abcdefgh	0.888889	good
+fail	abcdefghij	abcdefg	0.823529	fail
+trim	  Alpha Beta  	alpha beta	1.000000	perfect
+internal_space	alpha  beta	alpha beta	0.952381	good
+locale_i	I	i	1.000000	perfect

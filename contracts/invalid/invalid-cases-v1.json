@@ -1,0 +1,60 @@
+{
+  "base": "../valid/memcoach-backup-v1.json",
+  "cases": [
+    {
+      "id": "unknown_version",
+      "mutation": {"op": "replace", "path": "/version", "value": 2},
+      "expected_error": "unsupported_version"
+    },
+    {
+      "id": "bad_digest",
+      "mutation": {
+        "op": "replace",
+        "path": "/integrity/sha256",
+        "value": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected_error": "digest_mismatch"
+    },
+    {
+      "id": "duplicate_kid_id",
+      "mutation": {"op": "append_copy", "path": "/library/kids/0"},
+      "expected_error": "duplicate_id"
+    },
+    {
+      "id": "dangling_card_deck",
+      "mutation": {
+        "op": "replace",
+        "path": "/library/cards/0/deck_portable_id",
+        "value": "66666666-6666-4666-8666-666666666666"
+      },
+      "expected_error": "dangling_reference"
+    },
+    {
+      "id": "uppercase_uuid",
+      "mutation": {
+        "op": "replace",
+        "path": "/library/kids/0/portable_id",
+        "value": "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"
+      },
+      "expected_error": "invalid_uuid"
+    },
+    {
+      "id": "unknown_core_property",
+      "mutation": {
+        "op": "add",
+        "path": "/library/cards/0/interval_days",
+        "value": 6
+      },
+      "expected_error": "unknown_property"
+    },
+    {
+      "id": "unsupported_extensions",
+      "mutation": {
+        "op": "add",
+        "path": "/extensions",
+        "value": {"tags": []}
+      },
+      "expected_error": "unsupported_section"
+    }
+  ]
+}

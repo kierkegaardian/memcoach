@@ -3,6 +3,7 @@ package com.memcoach.offline.di
 import android.content.Context
 import androidx.room.Room
 import com.memcoach.offline.data.local.MemCoachDatabase
+import com.memcoach.offline.data.local.MemCoachRoomMigrations
 import com.memcoach.offline.data.repository.AppPreferencesRepositoryImpl
 import com.memcoach.offline.data.repository.CardRepositoryImpl
 import com.memcoach.offline.data.repository.DeckRepositoryImpl
@@ -18,7 +19,9 @@ class AppContainer(context: Context) {
     private val appContext = context.applicationContext
 
     val database: MemCoachDatabase by lazy {
+        MemCoachRoomMigrations.requireCompleteChain()
         Room.databaseBuilder(appContext, MemCoachDatabase::class.java, "memcoach-offline.db")
+            .addMigrations(*MemCoachRoomMigrations.all.toTypedArray())
             .build()
     }
 

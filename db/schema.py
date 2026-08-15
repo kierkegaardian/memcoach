@@ -1,12 +1,25 @@
 # SQL schema for MemCoach database
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
-SCHEMA_SQL = """
+PORTABLE_ID_DEFAULT_SQL = """(
+    lower(hex(randomblob(4))) || '-' ||
+    lower(hex(randomblob(2))) || '-' ||
+    '4' || substr(lower(hex(randomblob(2))), 2) || '-' ||
+    substr('89ab', 1 + abs(random() % 4), 1) ||
+    substr(lower(hex(randomblob(2))), 2) || '-' ||
+    lower(hex(randomblob(6)))
+)"""
+
+UTC_TIMESTAMP_DEFAULT_SQL = "(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
+
+SCHEMA_SQL = f"""
 -- Kids
 CREATE TABLE IF NOT EXISTS kids (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
+    portable_id TEXT NOT NULL DEFAULT {PORTABLE_ID_DEFAULT_SQL},
+    updated_at TEXT NOT NULL DEFAULT {UTC_TIMESTAMP_DEFAULT_SQL},
     deleted_at TEXT
 );
 
@@ -14,6 +27,8 @@ CREATE TABLE IF NOT EXISTS kids (
 CREATE TABLE IF NOT EXISTS decks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
+    portable_id TEXT NOT NULL DEFAULT {PORTABLE_ID_DEFAULT_SQL},
+    updated_at TEXT NOT NULL DEFAULT {UTC_TIMESTAMP_DEFAULT_SQL},
     review_mode TEXT NOT NULL DEFAULT 'free_recall' CHECK(review_mode IN ('free_recall', 'recitation', 'cloze', 'first_letters')),
     deleted_at TEXT
 );
@@ -68,6 +83,8 @@ CREATE TABLE IF NOT EXISTS cards (
     deck_id INTEGER NOT NULL,
     prompt TEXT NOT NULL,
     full_text TEXT NOT NULL,
+    portable_id TEXT NOT NULL DEFAULT {PORTABLE_ID_DEFAULT_SQL},
+    updated_at TEXT NOT NULL DEFAULT {UTC_TIMESTAMP_DEFAULT_SQL},
     text_id INTEGER,
     chunk_index INTEGER,
     interval_days INTEGER NOT NULL DEFAULT 1,
@@ -85,6 +102,7 @@ CREATE TABLE IF NOT EXISTS cards (
 CREATE TABLE IF NOT EXISTS card_progress (
     kid_id INTEGER NOT NULL,
     card_id INTEGER NOT NULL,
+    portable_id TEXT NOT NULL DEFAULT {PORTABLE_ID_DEFAULT_SQL},
     interval_days INTEGER NOT NULL DEFAULT 1,
     due_date TEXT NOT NULL DEFAULT (date('now')),
     ease_factor REAL NOT NULL DEFAULT 2.5,
@@ -148,6 +166,7 @@ CREATE TABLE IF NOT EXISTS reviews (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     card_id INTEGER NOT NULL,
     kid_id INTEGER NOT NULL,
+    portable_id TEXT NOT NULL DEFAULT {PORTABLE_ID_DEFAULT_SQL},
     ts TEXT NOT NULL DEFAULT (datetime('now')),
     grade TEXT NOT NULL CHECK(grade IN ('perfect', 'good', 'fail')),
     auto_grade TEXT CHECK(auto_grade IN ('perfect', 'good', 'fail')),
@@ -170,6 +189,15 @@ CREATE TABLE IF NOT EXISTS bible_verses (
     verse INTEGER NOT NULL,
     text TEXT NOT NULL
 );
+
+-- Stable installation identity used only as portable-export provenance.
+CREATE TABLE IF NOT EXISTS installation_metadata (
+    singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
+    installation_id TEXT UNIQUE NOT NULL DEFAULT {PORTABLE_ID_DEFAULT_SQL},
+    created_at TEXT NOT NULL DEFAULT {UTC_TIMESTAMP_DEFAULT_SQL}
+);
+
+INSERT OR IGNORE INTO installation_metadata (singleton_id) VALUES (1);
 """
 
 # Indexes for performance
@@ -189,6 +217,11 @@ CREATE INDEX IF NOT EXISTS idx_kids_deleted ON kids (deleted_at);
 CREATE INDEX IF NOT EXISTS idx_decks_deleted ON decks (deleted_at);
 CREATE INDEX IF NOT EXISTS idx_reviews_card_kid ON reviews (card_id, kid_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_ts ON reviews (ts);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_kids_portable_id ON kids (portable_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_decks_portable_id ON decks (portable_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cards_portable_id ON cards (portable_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_card_progress_portable_id ON card_progress (portable_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_portable_id ON reviews (portable_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_kid ON assignments (kid_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_deck ON assignments (deck_id);
 CREATE INDEX IF NOT EXISTS idx_tags_name ON tags (name);

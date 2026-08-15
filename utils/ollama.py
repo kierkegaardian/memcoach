@@ -5,6 +5,8 @@ from config import load_config
 def call_llm(prompt: str, model: str = None, timeout: int = 15) -> Optional[str]:
     """Call local Ollama model with prompt, return response or None on error."""
     config = load_config()
+    if config.get('ollama', {}).get('provider', 'disabled') != 'local_cli':
+        return None
     model = model or config.get('ollama', {}).get('model', 'llama3.2')
     timeout = timeout or config.get('ollama', {}).get('timeout', 15)
     cmd = ['ollama', 'run', model]

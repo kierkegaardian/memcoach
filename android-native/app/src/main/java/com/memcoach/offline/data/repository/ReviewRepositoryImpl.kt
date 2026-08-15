@@ -14,6 +14,7 @@ import com.memcoach.offline.domain.repository.ReviewRepository
 import com.memcoach.offline.grading.RecallGrader
 import com.memcoach.offline.scheduling.Sm2Engine
 import java.time.LocalDate
+import java.util.UUID
 
 class ReviewRepositoryImpl(
     private val database: MemCoachDatabase,
@@ -74,6 +75,7 @@ class ReviewRepositoryImpl(
                     userText = userText,
                     durationSeconds = durationSeconds,
                     createdAtEpochMillis = now,
+                    portableId = UUID.randomUUID().toString(),
                 ),
             )
 
@@ -86,6 +88,7 @@ class ReviewRepositoryImpl(
                     streak = next.streak,
                     dueDateEpochDay = next.dueDate.toEpochDay(),
                     lastReviewEpochMillis = now,
+                    portableId = progress?.portableId ?: UUID.randomUUID().toString(),
                 ),
             )
 

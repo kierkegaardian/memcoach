@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memcoach.local/contracts/memcoach-backup-v1.schema.json",
+  "title": "MemCoach core portable library v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "version",
+    "exported_at",
+    "source",
+    "scope",
+    "counts",
+    "library",
+    "integrity"
+  ],
+  "properties": {
+    "format": {"const": "memcoach.portable"},
+    "version": {"const": 1},
+    "exported_at": {"$ref": "#/$defs/timestamp"},
+    "source": {"$ref": "#/$defs/source"},
+    "scope": {"const": "library"},
+    "counts": {"$ref": "#/$defs/counts"},
+    "library": {"$ref": "#/$defs/library"},
+    "integrity": {"$ref": "#/$defs/integrity"},
+    "extensions": {
+      "type": "object",
+      "description": "Reserved; Android v1 rejects packages containing this member."
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])$"
+    },
+    "ease": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]{6}$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app", "app_version", "installation_id", "platform"],
+      "properties": {
+        "app": {"type": "string", "minLength": 1, "maxLength": 64},
+        "app_version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "installation_id": {"$ref": "#/$defs/uuid"},
+        "platform": {"enum": ["web", "android"]}
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kids", "decks", "cards", "progress", "reviews"],
+      "properties": {
+        "kids": {"type": "integer", "minimum": 0},
+        "decks": {"type": "integer", "minimum": 0},
+        "cards": {"type": "integer", "minimum": 0},
+        "progress": {"type": "integer", "minimum": 0},
+        "reviews": {"type": "integer", "minimum": 0}
+      }
+    },
+    "library": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kids", "decks", "cards", "progress", "reviews"],
+      "properties": {
+        "kids": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/kid"}
+        },
+        "decks": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/deck"}
+        },
+        "cards": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/card"}
+        },
+        "progress": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/progress"}
+        },
+        "reviews": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/review"}
+        }
+      }
+    },
+    "kid": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["portable_id", "name", "updated_at"],
+      "properties": {
+        "portable_id": {"$ref": "#/$defs/uuid"},
+        "name": {"type": "string", "minLength": 1, "maxLength": 200},
+        "updated_at": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "deck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["portable_id", "name", "updated_at"],
+      "properties": {
+        "portable_id": {"$ref": "#/$defs/uuid"},
+        "name": {"type": "string", "minLength": 1, "maxLength": 200},
+        "updated_at": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "portable_id",
+        "deck_portable_id",
+        "prompt",
+        "full_text",
+        "updated_at"
+      ],
+      "properties": {
+        "portable_id": {"$ref": "#/$defs/uuid"},
+        "deck_portable_id": {"$ref": "#/$defs/uuid"},
+        "prompt": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "full_text": {"type": "string", "minLength": 1, "maxLength": 100000},
+        "updated_at": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "portable_id",
+        "kid_portable_id",
+        "card_portable_id",
+        "interval_days",
+        "due_date",
+        "ease_factor",
+        "streak",
+        "last_review"
+      ],
+      "properties": {
+        "portable_id": {"$ref": "#/$defs/uuid"},
+        "kid_portable_id": {"$ref": "#/$defs/uuid"},
+        "card_portable_id": {"$ref": "#/$defs/uuid"},
+        "interval_days": {"type": "integer", "minimum": 1},
+        "due_date": {"$ref": "#/$defs/date"},
+        "ease_factor": {"$ref": "#/$defs/ease"},
+        "streak": {"type": "integer", "minimum": 0},
+        "last_review": {
+          "oneOf": [
+            {"$ref": "#/$defs/timestamp"},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "portable_id",
+        "card_portable_id",
+        "kid_portable_id",
+        "grade",
+        "user_text",
+        "duration_seconds",
+        "ts"
+      ],
+      "properties": {
+        "portable_id": {"$ref": "#/$defs/uuid"},
+        "card_portable_id": {"$ref": "#/$defs/uuid"},
+        "kid_portable_id": {"$ref": "#/$defs/uuid"},
+        "grade": {"enum": ["perfect", "good", "fail"]},
+        "user_text": {
+          "type": ["string", "null"],
+          "maxLength": 100000
+        },
+        "duration_seconds": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "ts": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alg", "sha256"],
+      "properties": {
+        "alg": {"const": "sha256"},
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

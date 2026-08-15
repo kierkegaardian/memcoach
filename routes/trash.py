@@ -52,7 +52,10 @@ async def trash_index(request: Request, conn = Depends(get_db)):
 @router.post("/kids/{kid_id}/restore")
 async def restore_kid(kid_id: int, conn = Depends(get_db)):
     cursor = conn.cursor()
-    cursor.execute("UPDATE kids SET deleted_at = NULL WHERE id = ?", (kid_id,))
+    cursor.execute(
+        "UPDATE kids SET deleted_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
+        (kid_id,),
+    )
     if cursor.rowcount == 0:
         raise HTTPException(status_code=404, detail="Kid not found")
     conn.commit()
@@ -70,10 +73,16 @@ async def purge_kid(kid_id: int, conn = Depends(get_db)):
 @router.post("/decks/{deck_id}/restore")
 async def restore_deck(deck_id: int, conn = Depends(get_db)):
     cursor = conn.cursor()
-    cursor.execute("UPDATE decks SET deleted_at = NULL WHERE id = ?", (deck_id,))
+    cursor.execute(
+        "UPDATE decks SET deleted_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
+        (deck_id,),
+    )
     if cursor.rowcount == 0:
         raise HTTPException(status_code=404, detail="Deck not found")
-    cursor.execute("UPDATE cards SET deleted_at = NULL WHERE deck_id = ?", (deck_id,))
+    cursor.execute(
+        "UPDATE cards SET deleted_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE deck_id = ?",
+        (deck_id,),
+    )
     cursor.execute("UPDATE texts SET deleted_at = NULL WHERE deck_id = ?", (deck_id,))
     conn.commit()
     return RedirectResponse(url="/trash", status_code=status.HTTP_303_SEE_OTHER)
@@ -104,7 +113,10 @@ async def restore_card(card_id: int, conn = Depends(get_db)):
     deck = cursor.fetchone()
     if not deck or deck["deleted_at"] is not None:
         raise HTTPException(status_code=400, detail="Deck must be restored first")
-    cursor.execute("UPDATE cards SET deleted_at = NULL WHERE id = ?", (card_id,))
+    cursor.execute(
+        "UPDATE cards SET deleted_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
+        (card_id,),
+    )
     if card["text_id"]:
         cursor.execute("UPDATE texts SET deleted_at = NULL WHERE id = ?", (card["text_id"],))
     conn.commit()
@@ -131,7 +143,10 @@ async def restore_text(text_id: int, conn = Depends(get_db)):
     if not deck or deck["deleted_at"] is not None:
         raise HTTPException(status_code=400, detail="Deck must be restored first")
     cursor.execute("UPDATE texts SET deleted_at = NULL WHERE id = ?", (text_id,))
-    cursor.execute("UPDATE cards SET deleted_at = NULL WHERE text_id = ?", (text_id,))
+    cursor.execute(
+        "UPDATE cards SET deleted_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE text_id = ?",
+        (text_id,),
+    )
     conn.commit()
     return RedirectResponse(url="/trash", status_code=status.HTTP_303_SEE_OTHER)
 

@@ -4,6 +4,10 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 val uploadStoreFile = System.getenv("MEMCOACH_UPLOAD_STORE_FILE")
 val uploadStorePassword = System.getenv("MEMCOACH_UPLOAD_STORE_PASSWORD")
 val uploadKeyAlias = System.getenv("MEMCOACH_UPLOAD_KEY_ALIAS")
@@ -69,6 +73,11 @@ android {
         compose = true
     }
 
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+        getByName("test").resources.srcDir("../../contracts")
+    }
+
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
     }
@@ -111,4 +120,8 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.13")
     testImplementation("androidx.room:room-testing:2.6.1")
     testImplementation("androidx.arch.core:core-testing:2.2.0")
+
+    androidTestImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.room:room-testing:2.6.1")
 }

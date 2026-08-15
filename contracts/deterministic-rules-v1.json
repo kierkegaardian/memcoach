@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "grades": {
+    "fail": {"quality": 0},
+    "good": {"quality": 3},
+    "perfect": {"quality": 4}
+  },
+  "grading": {
+    "algorithm": "normalized_indel_similarity",
+    "normalization": ["trim", "unicode_lowercase"],
+    "perfect_threshold": "0.980000",
+    "good_threshold": "0.850000",
+    "blank_grade": "fail",
+    "borderline_llm": "web_only_optional"
+  },
+  "sm2": {
+    "ease_floor": "1.300000",
+    "failed_interval_days": 1,
+    "first_good_interval_days": 1,
+    "first_perfect_interval_days": 6,
+    "interval_rounding": "half_even"
+  }
+}

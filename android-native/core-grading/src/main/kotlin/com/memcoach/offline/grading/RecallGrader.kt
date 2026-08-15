@@ -1,5 +1,6 @@
 package com.memcoach.offline.grading
 
+import java.util.Locale
 import kotlin.math.min
 
 data class GradingThresholds(
@@ -17,8 +18,8 @@ object RecallGrader {
             return "fail"
         }
 
-        val userClean = userText.trim().lowercase()
-        val fullClean = fullText.trim().lowercase()
+        val userClean = userText.trim().lowercase(Locale.ROOT)
+        val fullClean = fullText.trim().lowercase(Locale.ROOT)
         val ratio = levenshteinRatio(userClean, fullClean)
 
         return when {
@@ -33,8 +34,10 @@ object RecallGrader {
             return 1.0
         }
 
-        val distance = levenshteinDistance(left, right)
-        val totalLength = left.length + right.length
+        val leftCodePoints = left.codePoints().toArray()
+        val rightCodePoints = right.codePoints().toArray()
+        val distance = indelDistance(leftCodePoints, rightCodePoints)
+        val totalLength = leftCodePoints.size + rightCodePoints.size
         if (totalLength == 0) {
             return 1.0
         }
@@ -42,21 +45,21 @@ object RecallGrader {
         return (totalLength - distance).toDouble() / totalLength.toDouble()
     }
 
-    private fun levenshteinDistance(left: String, right: String): Int {
+    private fun indelDistance(left: IntArray, right: IntArray): Int {
         if (left.isEmpty()) {
-            return right.length
+            return right.size
         }
         if (right.isEmpty()) {
-            return left.length
+            return left.size
         }
 
-        val previous = IntArray(right.length + 1) { it }
-        val current = IntArray(right.length + 1)
+        val previous = IntArray(right.size + 1) { it }
+        val current = IntArray(right.size + 1)
 
         for (i in left.indices) {
             current[0] = i + 1
             for (j in right.indices) {
-                val cost = if (left[i] == right[j]) 0 else 1
+                val cost = if (left[i] == right[j]) 0 else 2
                 current[j + 1] = min(
                     min(current[j] + 1, previous[j + 1] + 1),
                     previous[j] + cost,
@@ -67,6 +70,6 @@ object RecallGrader {
             }
         }
 
-        return previous[right.length]
+        return previous[right.size]
     }
 }

@@ -1,0 +1,8 @@
+case_id	grade	quality	interval_days	ease_six	streak	base_date	next_interval_days	next_ease_six	next_streak	due_date
+fail_reset	fail	0	10	2.500000	8	2026-03-01	1	1.700000	0	2026-03-02
+good_first	good	3	1	2.500000	0	2026-03-01	1	2.360000	1	2026-03-02
+perfect_first	perfect	4	1	2.500000	0	2026-03-01	6	2.500000	1	2026-03-07
+perfect_half_even	perfect	4	5	2.500000	2	2026-03-01	12	2.500000	3	2026-03-13
+good_existing	good	3	10	2.500000	3	2026-03-01	25	2.360000	4	2026-03-26
+fail_floor	fail	0	1	1.300000	0	2026-03-01	1	1.300000	0	2026-03-02
+clamp_invalid_input	perfect	4	0	1.000000	0	2026-03-01	6	1.300000	1	2026-03-07

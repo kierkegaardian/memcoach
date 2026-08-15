@@ -1,5 +1,6 @@
 package com.memcoach.offline.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -21,7 +22,11 @@ import androidx.room.Index
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index(value = ["kidId", "dueDateEpochDay"]), Index(value = ["cardId"])],
+    indices = [
+        Index(value = ["kidId", "dueDateEpochDay"]),
+        Index(value = ["cardId"]),
+        Index(value = ["portableId"], unique = true),
+    ],
 )
 data class CardProgressEntity(
     val kidId: Long,
@@ -30,5 +35,7 @@ data class CardProgressEntity(
     val easeFactor: Double,
     val streak: Int,
     val dueDateEpochDay: Long,
-    val lastReviewEpochMillis: Long,
+    val lastReviewEpochMillis: Long?,
+    @ColumnInfo(defaultValue = "''")
+    val portableId: String,
 )
